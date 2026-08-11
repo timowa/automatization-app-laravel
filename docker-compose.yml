@@ -1,0 +1,59 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: vk19-app
+    restart: unless-stopped
+    working_dir: /var/www/html
+    volumes:
+      - ./:/var/www/html
+      - ./storage/logs:/var/www/html/storage/logs
+    networks:
+      - vk19-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  nginx:
+    image: nginx:alpine
+    container_name: vk19-nginx
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - ./:/var/www/html
+      - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - vk19-network
+    depends_on:
+      - app
+
+  mysql:
+    image: mysql:8.4
+    container_name: vk19-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_DATABASE: vk19
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_USER: vk19
+      MYSQL_PASSWORD: secret
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - vk19-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mysql-data:
+
+networks:
+  vk19-network:
+    driver: bridge
