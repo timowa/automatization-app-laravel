@@ -38,40 +38,40 @@ return [
 
         'vk' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/vk.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => storage_path('logs/vk/posts/error.log'),
+            'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
         ],
 
         'vkRepost' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/vkRepost.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => storage_path('logs/vk/reposts/error.log'),
+            'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
         ],
 
         'vk-sync' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/vk-sync.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => storage_path('logs/vk/sync/error.log'),
+            'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
         ],
 
         'check_tokens' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/check_tokens.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => storage_path('logs/vk/tokens/error.log'),
+            'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
         ],
 
         'stats' => [
             'driver' => 'daily',
-            'path' => storage_path('logs/stats.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'path' => storage_path('logs/vk/stats/error.log'),
+            'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
         ],
@@ -79,7 +79,7 @@ return [
         'job' => [
             'driver' => 'daily',
             'path' => storage_path('logs/job.log'),
-            'level' => env('LOG_LEVEL', 'debug'),
+            'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
         ],

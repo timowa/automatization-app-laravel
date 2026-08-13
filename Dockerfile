@@ -31,6 +31,17 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 WORKDIR /var/www/html
 
+# Подготовка директорий для VK-логов
+RUN mkdir -p /var/www/html/storage/logs/vk/posts \
+    /var/www/html/storage/logs/vk/reposts \
+    /var/www/html/storage/logs/vk/sync \
+    /var/www/html/storage/logs/vk/tokens \
+    /var/www/html/storage/logs/vk/stats
+
+# Entrypoint для исправления прав при старте контейнера
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 EXPOSE 9000
 
-CMD ["php-fpm"]
+CMD ["/usr/local/bin/entrypoint.sh"]

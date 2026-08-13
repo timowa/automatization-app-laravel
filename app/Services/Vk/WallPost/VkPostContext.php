@@ -17,6 +17,7 @@ class VkPostContext
         public ?int $floor,
         public ?int $floorsTotal,
         public int $price,
+        public ?int $oldPrice,
         public ?int $commission,
         public ?int $deposit,
         public string $agentName,
@@ -32,6 +33,11 @@ class VkPostContext
     public function getPrice(): string
     {
         return formatPrice($this->price);
+    }
+
+    public function getOldPrice(): ?string
+    {
+        return $this->oldPrice !== null ? formatPrice($this->oldPrice) : null;
     }
 
     public function getCommission(): ?string

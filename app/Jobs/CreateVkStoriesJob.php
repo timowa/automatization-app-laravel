@@ -5,8 +5,14 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Enums\Deal;
+use App\Enums\PublicationTaskStatus;
+use App\Exceptions\NotFoundException;
+use App\Helpers\PublicationTaskDependencyResolver;
+use App\Models\Agent;
+use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
+use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\Stories\Templates\RentStoriesTemplate;
 use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
 use App\Services\Vk\Stories\VkStoriesContextFactory;
@@ -18,6 +24,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use VK\Exceptions\VKApiException;
 
 class CreateVkStoriesJob implements ShouldQueue
 {
@@ -28,40 +35,88 @@ class CreateVkStoriesJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(private readonly int $postId)
+    public function __construct(
+        private readonly int $taskId,
+        protected PublicationTaskDependencyResolver $taskDependencyResolver,
+        protected TaskDispatcher $taskDispatcher,
+    )
     {
     }
 
     public function handle(VkApiService $vkApi): void
     {
-        $post = VkWallPost::findOrFail($this->postId);
-        $offer = $post->offer;
-        $agent = $offer?->agent;
-        /** @var VkUser|null $vkUser */
-        $vkUser = $agent?->vkUser;
+        $task = PublicationTask::findOrFail($this->taskId);
 
-        if (!$vkUser || $vkUser->getToken() === '') {
-            throw new \RuntimeException('Для агента не задан токен');
+        try {
+            $task->update(['status' => PublicationTaskStatus::PROCESSING]);
+
+            $task->load('publication.offer');
+            $offer = $task->publication?->offer;
+
+            if (!$offer) {
+                throw new NotFoundException('Оффер не найден');
+            }
+
+            $parentTask = $task->parentTask;
+            $post = VkWallPost::find($parentTask?->externalId);
+            if (!$post) {
+                throw new NotFoundException('Пост не найден');
+            }
+
+            $agent = $offer->agent;
+            /** @var VkUser|null $vkUser */
+            $vkUser = $agent?->vkUser;
+
+            if (!$vkUser || $vkUser->getToken() === '') {
+                throw new NotFoundException('Для агента не задан токен');
+            }
+
+            $vkApi->setToken($vkUser->getToken());
+
+            $context = (new VkStoriesContextFactory())->getContext((int) $post->id);
+            $template = $this->resolveTemplate($context);
+            $image = (new VkStoriesGenerator())->generate($context, $template);
+
+            $res = $vkApi->storiesPost($post->getFullId(), $image);
+
+            if (($res['count'] ?? 0) < 1) {
+                throw new \RuntimeException(json_encode($res, JSON_UNESCAPED_UNICODE));
+            }
+
+            unlink($image);
+
+            $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+
+            Log::channel('job')->info('История по офферу опубликована', [
+                'offer_id' => $context->offerId,
+                'post_id' => $post->id,
+            ]);
+
+            $this->taskDependencyResolver->release($this->taskId);
+            $this->taskDispatcher->dispatch($task->publication_id);
+        } catch (NotFoundException $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
+        } catch (VkApiException $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->error($e->getMessage(), [
+                'task_id' => $this->taskId,
+                'error_code' => $e->getErrorCode(),
+                'error_message' => $e->getErrorMessage(),
+                'description' => $e->getDescription(),
+                'vk_error' => $e->getError()
+            ]);
+            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
+        } catch (\Throwable $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->error($e->getMessage(), [
+                'task_id' => $this->taskId,
+                'trace' => $e->getTraceAsString(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]);
+            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
         }
-
-        $vkApi->setToken($vkUser->getToken());
-
-        $context = (new VkStoriesContextFactory())->getContext($this->postId);
-        $template = $this->resolveTemplate($context);
-        $image = (new VkStoriesGenerator())->generate($context, $template);
-
-        $res = $vkApi->storiesPost($context->postId, $image);
-
-        if (($res['count'] ?? 0) < 1) {
-            throw new \RuntimeException(json_encode($res, JSON_UNESCAPED_UNICODE));
-        }
-
-        unlink($image);
-
-        Log::channel('vk')->info('История по офферу опубликована', [
-            'offer_id' => $context->offerId,
-            'post_id' => $this->postId,
-        ]);
     }
 
     private function resolveTemplate(\App\Services\Vk\Stories\VkStoriesContext $context): \App\Interfaces\VkStoriesTemplateInterface

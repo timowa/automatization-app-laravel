@@ -1,8 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Helpers;
 
-use App\DTO\OfferData;
 use App\Enums\Category;
 use App\Enums\City;
 use App\Enums\Deal;
@@ -12,7 +13,7 @@ use App\Models\Agent;
 
 final class OfferParser
 {
-    public function parse(array $data): OfferData
+    public function parse(array $data): \App\DTO\OfferData
     {
         $agentPhone = $data['agent']['phone'] ?? null;
         $offerCode = $data['code'] ?? null;
@@ -36,7 +37,7 @@ final class OfferParser
         $images = [];
         foreach ($data['photos'] ?? [] as $photo) {
             $image = $photo['url'] ?? '';
-            if ($image !== '' && isImageUrl($image)) {
+            if ($image !== '') {
                 $images[] = $image;
             }
         }
@@ -46,8 +47,7 @@ final class OfferParser
         $category = Category::tryFromLabel($data['category'] ?? null) ?? null;
         $status = OfferStatus::tryFromLabel($data['status']);
 
-        $isActive = ($data['status'] ?? null) === 'актив';
-        return new OfferData(
+        return new \App\DTO\OfferData(
             (int) $data['id'],
             (string) $data['code'],
             $data['stage'],
@@ -68,7 +68,6 @@ final class OfferParser
             $deal,
             $category,
             $data['location'] ?? null,
-            $isActive,
         );
     }
 }

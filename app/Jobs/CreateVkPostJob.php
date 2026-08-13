@@ -17,8 +17,6 @@ use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\VkApiService;
-use App\Services\Vk\WallPost\Templates\RentTemplate;
-use App\Services\Vk\WallPost\Templates\SaleTemplate;
 use App\Services\Vk\WallPost\VkPostContextFactory;
 use App\Services\Vk\WallPost\VkPostGenerator;
 use Illuminate\Bus\Queueable;
@@ -40,18 +38,17 @@ class CreateVkPostJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId,
-        protected ScenarioVkPostTemplateResolver $templateResolver,
-        protected PublicationTaskDependencyResolver $taskDependencyResolver,
-        protected TaskDispatcher $taskDispatcher,
     )
     {
     }
 
-    public function handle(VkApiService $vkApi): void
+    public function handle(VkApiService $vkApi, ScenarioVkPostTemplateResolver $templateResolver,
+                           PublicationTaskDependencyResolver $taskDependencyResolver,
+                           TaskDispatcher $taskDispatcher,): void
     {
-        try {
-            $task = PublicationTask::findOrFail($this->taskId);
+        $task = PublicationTask::findOrFail($this->taskId);
 
+        try {
             $task->update(['status' => PublicationTaskStatus::PROCESSING]);
 
             $task->load('publication.offer');
@@ -76,7 +73,7 @@ class CreateVkPostJob implements ShouldQueue
             $vkApi->setToken($vkUser->getToken());
 
             $context = (new VkPostContextFactory())->getContext($offer->id);
-            $template = $this->templateResolver->resolve($task->publication->scenario);
+            $template = $templateResolver->resolve($task->publication->scenario);
             $message = (new VkPostGenerator())->generate($context, $template);
 
             $res = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $context->images);
@@ -95,12 +92,14 @@ class CreateVkPostJob implements ShouldQueue
                 'post_id' => $post->id,
             ]);
 
-            $this->taskDependencyResolver->release($this->taskId);
-            $this->taskDispatcher->dispatch($task->publication_id);
-
+            $taskDependencyResolver->release($this->taskId);
+            $taskDispatcher->dispatch($task->publication_id);
         } catch (NotFoundException $e) {
-            Log::channel('job')->warning($e->getMessage(), ['task_id' => $this->taskId]);
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('job')->warning('Ошибка создания поста по офферу', ['task_id' => $this->taskId]);
+            Log::channel('vk')->warning($e->getMessage());
         } catch (VkApiException $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
@@ -108,16 +107,16 @@ class CreateVkPostJob implements ShouldQueue
                 'description' => $e->getDescription(),
                 'vk_error' => $e->getError()
             ]);
+            Log::channel('job')->warning('Ошибка создания поста по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
-        } finally {
-            Log::channel('job')->warning('Пост не был опубликован');
-            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('job')->warning('Ошибка создания поста по офферу', ['task_id' => $this->taskId]);
         }
     }
 }

@@ -51,7 +51,7 @@ final readonly class OfferData
             'rooms' => $this->rooms,
             'rooms_offered' => $this->roomsOffered,
             'floor' => $this->floor,
-            'floors' => $this->floors,
+            'floors_total' => $this->floors,
             'images' => $this->images,
             'deal' => $this->deal,
             'category' => $this->category,

@@ -3,6 +3,7 @@
 namespace App\Scenarios;
 
 use App\Enums\PublicationTaskStatus;
+use App\Enums\PublicationTaskType;
 use App\Helpers\JobResolver;
 use App\Models\PublicationTask;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,8 @@ class TaskDispatcher
         }
 
         foreach ($tasks as $task) {
-            $job = $this->jobResolver->resolve($task->type);
+            $type = PublicationTaskType::from($task->type);
+            $job = $this->jobResolver->resolve($type);
             $job::dispatch($task->id);
         }
     }

@@ -14,6 +14,11 @@ class VkPostContextFactory
         $agent = $offer->agent;
         $city = $offer->city();
 
+        $prevOffer = Offer::where('code', $offer->code)
+            ->where('id', '<', $offer->id)
+            ->latest('id')
+            ->first();
+
         return new VkPostContext(
             address: $offer->getAddressFromLocation(),
             rooms: (int) $offer->rooms,
@@ -22,6 +27,7 @@ class VkPostContextFactory
             floor: $offer->floor,
             floorsTotal: $offer->floors_total,
             price: $offer->getPrice(),
+            oldPrice: $prevOffer?->getPrice(),
             commission: $offer->commission,
             deposit: $offer->deposit,
             agentName: $agent->name,

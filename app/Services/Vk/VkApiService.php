@@ -196,4 +196,106 @@ VKSCRIPT;
     {
         return $this->client;
     }
+
+    /**
+     * @throws VKClientException
+     * @throws VKApiException
+     */
+    public function createComment(int $ownerId, int $postId, string $message): array
+    {
+        return $this->client->wall()->createComment($this->token, [
+            'owner_id' => $ownerId,
+            'post_id' => $postId,
+            'message' => $message,
+        ]);
+    }
+
+    /**
+     * @throws VKClientException
+     * @throws VKApiException
+     */
+    public function createProduct(int $groupId, string $name, string $description, int $price, int $categoryId, array $imagePaths): array
+    {
+        $attachments = [];
+        $files = [];
+
+        if (!empty($imagePaths)) {
+            $imagePaths = array_slice($imagePaths, 0, 5);
+            $address = $this->client->photos()->getMarketUploadServer($this->token, [
+                'group_id' => $groupId,
+                'main_photo' => 1,
+            ]);
+
+            foreach ($imagePaths as $image) {
+                try {
+                    $filename = is_file($image)
+                        ? $image
+                        : downloadFile($image, storage_path('app/tmp'));
+
+                    if (is_file($image) === false) {
+                        $files[] = $filename;
+                    }
+
+                    $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
+                    $saveResponse = $this->client->photos()->saveMarketPhoto($this->token, [
+                        'group_id' => $groupId,
+                        'photo' => $photo['photo'],
+                        'server' => $photo['server'],
+                        'hash' => $photo['hash'],
+                        'crop_data' => $photo['crop_data'] ?? '',
+                        'crop_hash' => $photo['crop_hash'] ?? '',
+                    ])[0];
+
+                    $attachments[] = $saveResponse['id'];
+                } catch (\Throwable $th) {
+                    Log::channel('vk')->error($th->getMessage());
+                    continue;
+                }
+            }
+        }
+
+        $result = $this->client->market()->add($this->token, [
+            'owner_id' => -$groupId,
+            'name' => $name,
+            'description' => $description,
+            'category_id' => $categoryId,
+            'price' => $price,
+            'main_photo_id' => $attachments[0] ?? null,
+            'photo_ids' => implode(',', array_slice($attachments, 1)),
+        ]);
+
+        foreach ($files as $file) {
+            unlink($file);
+        }
+
+        return $result;
+    }
+
+    /**
+     * @throws VKClientException
+     * @throws VKApiException
+     */
+    public function editProduct(int $groupId, int $productId, string $name, string $description, int $price, int $categoryId): array
+    {
+        return $this->client->market()->edit($this->token, [
+            'owner_id' => -$groupId,
+            'item_id' => $productId,
+            'name' => $name,
+            'description' => $description,
+            'category_id' => $categoryId,
+            'price' => $price,
+        ]);
+    }
+
+    /**
+     * @throws VKClientException
+     * @throws VKApiException
+     */
+    public function archiveProduct(int $groupId, int $productId): array
+    {
+        return $this->client->market()->delete($this->token, [
+            'owner_id' => -$groupId,
+            'item_id' => $productId,
+        ]);
+    }
 }

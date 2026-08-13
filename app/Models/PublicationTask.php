@@ -10,6 +10,8 @@ use Illuminate\Database\Eloquent\Relations\HasOneThrough;
 
 class PublicationTask extends Model
 {
+    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+
     protected $table = 'publication_tasks';
     protected $fillable = [
         'publication_id',

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Model;
 
 class VkGroup extends Model
 {
+    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+
     protected $table = 'vk_groups';
 
     public $timestamps = false;

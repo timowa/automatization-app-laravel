@@ -10,10 +10,15 @@ final class PublicationTaskDependenceInspector
     {
         return match ($type) {
             PublicationTaskType::VK_STORY,
+            PublicationTaskType::VK_LOOP_STORY,
             PublicationTaskType::VK_COMMENT,
             PublicationTaskType::VK_REPOST,
-            PublicationTaskType::VK_PRODUCT => PublicationTaskType::VK_POST,
-            default => null
+            PublicationTaskType::VK_CREATE_PRODUCT => PublicationTaskType::VK_POST,
+
+            PublicationTaskType::VK_EDIT_PRODUCT,
+            PublicationTaskType::VK_ARCHIVE_PRODUCT => PublicationTaskType::VK_CREATE_PRODUCT,
+
+            default => null,
         };
     }
 }

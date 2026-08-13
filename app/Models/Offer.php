@@ -15,6 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Offer extends Model
 {
+    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+
     protected $table = 'offers';
 
     public $timestamps = true;
@@ -43,13 +45,11 @@ class Offer extends Model
         'floors_total',
         'commission',
         'deposit',
-        'is_active',
     ];
 
     protected $casts = [
         'images' => 'array',
         'location' => 'array',
-        'is_active' => 'boolean',
         'area' => 'float',
         'kitchen_area' => 'float',
         'living_area' => 'float',

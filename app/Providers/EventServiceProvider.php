@@ -14,8 +14,12 @@ class EventServiceProvider extends ServiceProvider
         OfferCreatedEvent::class => [
             ProcessOfferListener::class,
         ],
-
     ];
+
+    public function shouldDiscoverEvents(): bool
+    {
+        return false;
+    }
 
     public function boot(): void
     {

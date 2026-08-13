@@ -16,18 +16,16 @@ class ScenarioResolver
     {
         $scenarios = $this->scenarioFactory->list();
 
-        if (is_null($offerChanged->previous)) {
-            return new $scenarios[0];
-        }
-
-        foreach ($scenarios as $scenario) {
+        foreach ($scenarios as $scenarioClass) {
+            $scenario = new $scenarioClass;
             $rules = $scenario->rules();
             foreach ($rules as $rule) {
-                if (!$rule->passes($offerChanged)) {
+                $ruleObj = new $rule;
+                if (!$ruleObj->passes($offerChanged)) {
                     continue(2);
                 }
             }
-            return new $scenario;
+            return $scenario;
         }
 
         return null;

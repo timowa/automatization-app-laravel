@@ -6,10 +6,12 @@ namespace App\Jobs;
 
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
+use App\Helpers\PublicationTaskDependencyResolver;
 use App\Models\PublicationTask;
 use App\Models\VkGroup;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
+use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -28,14 +30,21 @@ class CreateVkRepostJob implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(private readonly int $taskId)
+    public function __construct(
+        private readonly int $taskId,
+        protected PublicationTaskDependencyResolver $taskDependencyResolver,
+        protected TaskDispatcher $taskDispatcher,
+    )
     {
     }
 
     public function handle(VkApiService $vkApi): void
     {
+        $task = PublicationTask::findOrFail($this->taskId);
+
         try {
-            $task = PublicationTask::findOrFail($this->taskId);
+            $task->update(['status' => PublicationTaskStatus::PROCESSING]);
+
             $parentTask = $task->parentTask;
             $postId = $parentTask->externalId;
             $post = VkWallPost::find($postId);
@@ -79,21 +88,38 @@ class CreateVkRepostJob implements ShouldQueue
                     'response' => $response,
                 ]);
             }
+
+            $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+
+            Log::channel('job')->info('Репосты по офферу выполнены', [
+                'offer' => $offer->code,
+                'post_id' => $post->id,
+            ]);
+
+            $this->taskDependencyResolver->release($this->taskId);
+            $this->taskDispatcher->dispatch($task->publication_id);
         } catch (NotFoundException $e) {
-            Log::channel('job')->warning($e->getMessage(), ['task_id' => $this->taskId]);
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         } catch (VkApiException $e) {
-            Log::channel('job')->warning($e->getMessage(), ['task_id' => $this->taskId]);
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->error($e->getMessage(), [
+                'task_id' => $this->taskId,
+                'error_code' => $e->getErrorCode(),
+                'error_message' => $e->getErrorMessage(),
+                'description' => $e->getDescription(),
+                'vk_error' => $e->getError()
+            ]);
+            Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
-        } finally {
-            Log::channel('job')->warning('Репост не был опубликован');
-            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         }
-
     }
 }
