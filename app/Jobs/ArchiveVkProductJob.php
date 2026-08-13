@@ -4,19 +4,15 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
-use App\Enums\Deal;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
 use App\Models\Agent;
 use App\Models\PublicationTask;
+use App\Models\VkProduct;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
-use App\Services\Vk\Stories\Templates\RentStoriesTemplate;
-use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
-use App\Services\Vk\Stories\VkStoriesContextFactory;
-use App\Services\Vk\Stories\VkStoriesGenerator;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -26,7 +22,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use VK\Exceptions\VKApiException;
 
-class CreateVkStoriesJob implements ShouldQueue
+class ArchiveVkProductJob implements ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
@@ -63,6 +59,21 @@ class CreateVkStoriesJob implements ShouldQueue
                 throw new NotFoundException('Оффер не найден');
             }
 
+            $products = VkProduct::where('offer_id', $offer->id)
+                ->where('is_archived', false)
+                ->get();
+
+            if ($products->isEmpty()) {
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+
+                Log::channel('job')->info('Архивация товаров не требуется', [
+                    'offer' => $offer->code,
+                ]);
+
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
+            }
 
             $agent = $offer->agent;
             /** @var VkUser|null $vkUser */
@@ -74,30 +85,53 @@ class CreateVkStoriesJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkStoriesContextFactory())->getContext((int) $post->id);
-            $template = $this->resolveTemplate($context);
-            $image = (new VkStoriesGenerator())->generate($context, $template);
+            $groupIds = $products->pluck('group_id')->toArray();
+            $productIds = $products->pluck('product_id')->toArray();
 
-            $res = $vkApi->storiesPost($post->getFullId(), $image);
+            if (count($groupIds) === 1) {
+                $groupId = $groupIds[0];
+                $idsJson = json_encode(array_values($productIds));
 
-            if (($res['count'] ?? 0) < 1) {
-                throw new \RuntimeException(json_encode($res, JSON_UNESCAPED_UNICODE));
+                $code = <<<VKSCRIPT
+                var groupId = {$groupId};
+                var productIds = {$idsJson};
+                var result = [];
+                var i = 0;
+                while (i < productIds.length) {
+                    result.push(API.market.delete({
+                        "owner_id": -groupId,
+                        "item_id": productIds[i]
+                    }));
+                    i = i + 1;
+                }
+                return result;
+VKSCRIPT;
+
+                $vkApi->getClient()->getRequest()->post('execute', $vkApi->getClient()->getToken(), [
+                    'code' => $code,
+                ]);
+            } else {
+                foreach ($products as $product) {
+                    $vkApi->archiveProduct((int) $product->group_id, (int) $product->product_id);
+                    usleep(350_000);
+                }
             }
 
-            unlink($image);
+            VkProduct::where('offer_id', $offer->id)
+                ->where('is_archived', false)
+                ->update(['is_archived' => true]);
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);
 
-            Log::channel('job')->info('История по офферу опубликована', [
-                'offer_id' => $context->offerId,
-                'post_id' => $post->id,
+            Log::channel('job')->info('Товары по офферу архивированы', [
+                'offer' => $offer->code,
             ]);
 
             $taskDependencyResolver->release($this->taskId);
             $taskDispatcher->dispatch($task->publication_id);
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
-            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
+            Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
         } catch (VkApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
@@ -107,7 +141,7 @@ class CreateVkStoriesJob implements ShouldQueue
                 'description' => $e->getDescription(),
                 'vk_error' => $e->getError()
             ]);
-            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
+            Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
@@ -116,16 +150,7 @@ class CreateVkStoriesJob implements ShouldQueue
                 'file' => $e->getFile(),
                 'line' => $e->getLine()
             ]);
-            Log::channel('job')->warning('Ошибка публикации истории по офферу', ['task_id' => $this->taskId]);
+            Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
         }
-    }
-
-    private function resolveTemplate(\App\Services\Vk\Stories\VkStoriesContext $context): \App\Interfaces\VkStoriesTemplateInterface
-    {
-        return match ($context->deal) {
-            Deal::SALE => new SaleStoriesTemplate(),
-            Deal::RENT_OUT => new RentStoriesTemplate(),
-            default => throw new \RuntimeException('Неподдерживаемый тип сделки для истории: ' . $context->getDeal()),
-        };
     }
 }

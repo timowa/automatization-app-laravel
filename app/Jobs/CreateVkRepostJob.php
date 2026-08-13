@@ -31,14 +31,14 @@ class CreateVkRepostJob implements ShouldQueue
     public int $tries = 1;
 
     public function __construct(
-        private readonly int $taskId,
-        protected PublicationTaskDependencyResolver $taskDependencyResolver,
-        protected TaskDispatcher $taskDispatcher,
+        private readonly int $taskId
     )
     {
     }
 
-    public function handle(VkApiService $vkApi): void
+    public function handle(VkApiService $vkApi,
+                           PublicationTaskDependencyResolver $taskDependencyResolver,
+                           TaskDispatcher $taskDispatcher): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
@@ -46,7 +46,7 @@ class CreateVkRepostJob implements ShouldQueue
             $task->update(['status' => PublicationTaskStatus::PROCESSING]);
 
             $parentTask = $task->parentTask;
-            $postId = $parentTask->externalId;
+            $postId = $parentTask->external_id;
             $post = VkWallPost::find($postId);
             if (!$post) {
                 throw new NotFoundException('Пост не найден');
@@ -96,8 +96,8 @@ class CreateVkRepostJob implements ShouldQueue
                 'post_id' => $post->id,
             ]);
 
-            $this->taskDependencyResolver->release($this->taskId);
-            $this->taskDispatcher->dispatch($task->publication_id);
+            $taskDependencyResolver->release($this->taskId);
+            $taskDispatcher->dispatch($task->publication_id);
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
