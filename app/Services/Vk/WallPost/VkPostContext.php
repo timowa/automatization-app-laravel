@@ -27,6 +27,7 @@ class VkPostContext
         public int $offerId,
         public Deal $deal,
         public Category $category,
+        public string $code
     ) {
     }
 
@@ -103,5 +104,12 @@ class VkPostContext
     public function getCategory(): string
     {
         return $this->category->label();
+    }
+
+    public function getHasTag(): string
+    {
+        $tag = 'broker_plus_';
+        $code = str_replace('-', '_', $this->code);
+        return $tag . $code;
     }
 }

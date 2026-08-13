@@ -19,7 +19,6 @@ class NewOfferOrAnnouncementRule extends ScenarioRule
             ->orderByDesc('id')
             ->first();
 
-        return $prevPublication !== null
-            && in_array($prevPublication->scenario, [ScenarioType::ANNOUNCEMENT, ScenarioType::SALE], true);
+        return $prevPublication !== null && $prevPublication->scenario === ScenarioType::ANNOUNCEMENT;
     }
 }

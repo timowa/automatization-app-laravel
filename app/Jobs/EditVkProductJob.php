@@ -72,7 +72,7 @@ class EditVkProductJob implements ShouldQueue
             $name = "{$context->getCategory()}, {$context->address}";
             $description = "Подробности по телефону: {$context->agentPhone}\nАгент: {$context->agentName}";
             $price = $context->price;
-            $categoryId = config('vk.market_category_id', 1);
+            $categoryId = (int) config('vk.market_category_id', 1);
 
             $products = VkProduct::where('offer_id', $offer->id)
                 ->where('is_archived', false)
@@ -82,17 +82,33 @@ class EditVkProductJob implements ShouldQueue
                 throw new NotFoundException('Товары не найдены');
             }
 
-            foreach ($products as $product) {
-                $vkApi->editProduct(
-                    (int) $product->group_id,
-                    (int) $product->product_id,
-                    $name,
-                    $description,
-                    $price,
-                    (int) $categoryId
-                );
+            $batchProducts = $products->map(fn ($product) => [
+                'group_id' => (int) $product->group_id,
+                'product_id' => (int) $product->product_id,
+            ])->all();
 
-                usleep(350_000);
+            $chunks = array_chunk($batchProducts, 25);
+
+            foreach ($chunks as $index => $chunk) {
+                try {
+                    $vkApi->editProductsBatch(
+                        $chunk,
+                        $name,
+                        $description,
+                        $price,
+                        $categoryId
+                    );
+                } catch (\Throwable $th) {
+                    Log::channel('vk')->error('Ошибка редактирования товаров в чанке', [
+                        'chunk_index' => $index,
+                        'offer_id' => $offer->id,
+                        'error' => $th->getMessage(),
+                    ]);
+                }
+
+                if ($index < count($chunks) - 1) {
+                    usleep(350_000);
+                }
             }
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);

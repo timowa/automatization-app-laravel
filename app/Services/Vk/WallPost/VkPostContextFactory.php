@@ -37,6 +37,7 @@ class VkPostContextFactory
             offerId: (int) $offer->offer_id,
             deal: $offer->deal() ?? \App\Enums\Deal::SALE,
             category: $offer->category() ?? \App\Enums\Category::APARTMENT,
+            code: $offer->code,
         );
     }
 }

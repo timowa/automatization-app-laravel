@@ -44,7 +44,7 @@ class RentTemplate implements VkPostTemplateInterface
             Агент: {$context->agentName}
             📞 Телефон: {$context->agentPhone}
 
-            #broker_plus_rent_{$context->offerId}
+            #{$context->getHasTag()}
         TEXT;
     }
 }

@@ -7,7 +7,6 @@ namespace App\Jobs;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
-use App\Models\Agent;
 use App\Models\PublicationTask;
 use App\Models\VkProduct;
 use App\Models\VkUser;
@@ -85,34 +84,25 @@ class ArchiveVkProductJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $groupIds = $products->pluck('group_id')->toArray();
-            $productIds = $products->pluck('product_id')->toArray();
+            $batchProducts = $products->map(fn ($product) => [
+                'group_id' => (int) $product->group_id,
+                'product_id' => (int) $product->product_id,
+            ])->all();
 
-            if (count($groupIds) === 1) {
-                $groupId = $groupIds[0];
-                $idsJson = json_encode(array_values($productIds));
+            $chunks = array_chunk($batchProducts, 25);
 
-                $code = <<<VKSCRIPT
-                var groupId = {$groupId};
-                var productIds = {$idsJson};
-                var result = [];
-                var i = 0;
-                while (i < productIds.length) {
-                    result.push(API.market.delete({
-                        "owner_id": -groupId,
-                        "item_id": productIds[i]
-                    }));
-                    i = i + 1;
+            foreach ($chunks as $index => $chunk) {
+                try {
+                    $vkApi->archiveProductsBatch($chunk);
+                } catch (\Throwable $th) {
+                    Log::channel('vk')->error('Ошибка архивации товаров в чанке', [
+                        'chunk_index' => $index,
+                        'offer_id' => $offer->id,
+                        'error' => $th->getMessage(),
+                    ]);
                 }
-                return result;
-VKSCRIPT;
 
-                $vkApi->getClient()->getRequest()->post('execute', $vkApi->getClient()->getToken(), [
-                    'code' => $code,
-                ]);
-            } else {
-                foreach ($products as $product) {
-                    $vkApi->archiveProduct((int) $product->group_id, (int) $product->product_id);
+                if ($index < count($chunks) - 1) {
                     usleep(350_000);
                 }
             }

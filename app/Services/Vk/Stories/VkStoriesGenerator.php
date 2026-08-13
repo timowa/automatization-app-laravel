@@ -14,9 +14,9 @@ use Throwable;
 
 class VkStoriesGenerator
 {
-    private const BANNER_TEMPLATE = __DIR__ . '/../../../../../storage/app/assets/images/vkstory.png';
-    private const FONT_PATH = __DIR__ . '/../../../../../storage/app/assets/fonts/ProximaNova.ttf';
-    private const FONT_BOLD_PATH = __DIR__ . '/../../../../../storage/app/assets/fonts/ProximaNovaSemibold.ttf';
+    private const BANNER_TEMPLATE = __DIR__ . '/../../../../storage/app/assets/images/vkstory.png';
+    private const FONT_PATH = __DIR__ . '/../../../../storage/app/assets/fonts/ProximaNova.ttf';
+    private const FONT_BOLD_PATH = __DIR__ . '/../../../../storage/app/assets/fonts/ProximaNovaSemibold.ttf';
 
     public function generate(VkStoriesContext $context, VkStoriesTemplateInterface $template): string
     {

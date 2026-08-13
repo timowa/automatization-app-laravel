@@ -15,12 +15,12 @@ class FeedbackTemplate implements VkPostTemplateInterface
 
         return <<<TEXT
             ОТЗЫВ о сделке в г. {$context->cityName}!
-            
+
             {$title}: {$context->address}
-            
+
             Спасибо клиентам за доверие!
-            
-            #broker_plus_post_{$context->offerId}
+
+            #{$context->getHasTag()}
         TEXT;
     }
 }

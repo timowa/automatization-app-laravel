@@ -8,6 +8,7 @@ use App\Models\VkLoopStory;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Services\Vk\FakeVkApiService;
+use App\Services\Vk\VkApiService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -27,25 +28,29 @@ class PublishLoopStoriesCommandTest extends TestCase
             'is_active' => true,
             'last_published_at' => Carbon::now()->subDay(),
         ]);
+        $offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
 
+        $staleOffer = Offer::factory()->create();
         $stale = VkLoopStory::factory()->create([
-            'offer_id' => Offer::factory(),
+            'offer_id' => $staleOffer->id,
             'is_active' => true,
             'last_published_at' => Carbon::now()->subDays(5),
         ]);
-        VkUser::factory()->create(['agent_id' => $stale->offer->agent_id]);
-        VkWallPost::factory()->forOffer($stale->offer->id)->create();
+        VkUser::factory()->create(['agent_id' => $staleOffer->agent_id]);
+        VkWallPost::factory()->forOffer($staleOffer->id)->create();
+        $staleOffer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
 
         $inactive = VkLoopStory::factory()->inactive()->create();
 
         $vkApi = new FakeVkApiService;
-        $command = new PublishLoopStoriesCommand;
+        $vkApi->storiesPostResponse = ['count' => 1];
+        $this->app->instance(VkApiService::class, $vkApi);
 
         $this->artisan('vk:publish-loop-stories')
             ->assertSuccessful();
 
-        $stale->fresh();
-        $fresh->fresh();
+        $stale = $stale->fresh();
+        $fresh = $fresh->fresh();
 
         $this->assertNotNull($stale->last_published_at);
         $this->assertTrue($stale->last_published_at->greaterThan(Carbon::now()->subMinute()));

@@ -4,24 +4,28 @@ declare(strict_types=1);
 
 namespace App\Services\Vk;
 
+use VK\Client\VKApiError;
+use VK\Exceptions\VKApiException;
+
 class FakeVkApiService extends VkApiService
 {
     public array $calls = [];
     public bool $failNext = false;
-    public string $failWith = 'VKApiException';
+    public string $failWith = VKApiException::class;
     public ?string $failMessage = 'VK API error';
+    public array $storiesPostResponse = ['count' => 1];
 
     public function setFailNext(string $exceptionClass, string $message = 'VK API error'): void
     {
         $this->failNext = true;
-        $this->failWith = $exceptionClass;
+        $this->failWith = 'VK\\Exceptions\\' . ltrim($exceptionClass, '\\');
         $this->failMessage = $message;
     }
 
     public function reset(): void
     {
         $this->failNext = false;
-        $this->failWith = 'VKApiException';
+        $this->failWith = VKApiException::class;
         $this->failMessage = 'VK API error';
         $this->calls = [];
     }
@@ -33,9 +37,17 @@ class FakeVkApiService extends VkApiService
         }
 
         $this->failNext = false;
-        $class = 'VK\\Exceptions\\' . $this->failWith;
-        if (class_exists($class)) {
-            throw new $class($this->failMessage);
+
+        if (is_a($this->failWith, VKApiException::class, true)) {
+            throw new VKApiException(
+                1,
+                $this->failMessage,
+                new VKApiError(['error_code' => 1, 'error_msg' => $this->failMessage])
+            );
+        }
+
+        if (class_exists($this->failWith)) {
+            throw new $this->failWith($this->failMessage);
         }
 
         throw new \RuntimeException($this->failMessage);
@@ -54,7 +66,7 @@ class FakeVkApiService extends VkApiService
         $this->calls[] = ['method' => 'storiesPost', 'post_id' => $postId];
         $this->maybeFail('storiesPost');
 
-        return ['count' => 1];
+        return $this->storiesPostResponse;
     }
 
     public function createReposts(int $userId, string $postId, array $groupIds): array
@@ -76,27 +88,50 @@ class FakeVkApiService extends VkApiService
         return ['comment_id' => fake()->unique()->numberBetween(1, 1_000_000)];
     }
 
-    public function createProduct(int $groupId, string $name, string $description, int $price, int $categoryId, array $imagePaths): array
+    public function uploadMarketPhoto(array $imagePaths): array
     {
-        $this->calls[] = ['method' => 'createProduct', 'group_id' => $groupId];
-        $this->maybeFail('createProduct');
+        $this->calls[] = ['method' => 'uploadMarketPhoto', 'image_count' => count($imagePaths)];
+        $this->maybeFail('uploadMarketPhoto');
 
-        return ['market_item_id' => fake()->unique()->numberBetween(1, 1_000_000)];
+        return [fake()->unique()->numberBetween(1, 1_000_000)];
     }
 
-    public function editProduct(int $groupId, int $productId, string $name, string $description, int $price, int $categoryId): array
+    public function createProductsBatch(array $groupIds, string $name, string $description, int $price, int $categoryId, array $photoIds): array
     {
-        $this->calls[] = ['method' => 'editProduct', 'group_id' => $groupId, 'product_id' => $productId];
-        $this->maybeFail('editProduct');
+        $this->calls[] = [
+            'method' => 'createProductsBatch',
+            'group_count' => count($groupIds),
+            'photo_count' => count($photoIds),
+        ];
+        $this->maybeFail('createProductsBatch');
 
-        return ['success' => 1];
+        return array_map(fn ($groupId) => [
+            'group_id' => $groupId,
+            'response' => ['market_item_id' => fake()->unique()->numberBetween(1, 1_000_000)],
+        ], $groupIds);
     }
 
-    public function archiveProduct(int $groupId, int $productId): array
+    public function editProductsBatch(array $products, string $name, string $description, int $price, int $categoryId): array
     {
-        $this->calls[] = ['method' => 'archiveProduct', 'group_id' => $groupId, 'product_id' => $productId];
-        $this->maybeFail('archiveProduct');
+        $this->calls[] = ['method' => 'editProductsBatch', 'product_count' => count($products)];
+        $this->maybeFail('editProductsBatch');
 
-        return ['success' => 1];
+        return array_map(fn ($product) => [
+            'group_id' => $product['group_id'],
+            'product_id' => $product['product_id'],
+            'response' => 1,
+        ], $products);
+    }
+
+    public function archiveProductsBatch(array $products): array
+    {
+        $this->calls[] = ['method' => 'archiveProductsBatch', 'product_count' => count($products)];
+        $this->maybeFail('archiveProductsBatch');
+
+        return array_map(fn ($product) => [
+            'group_id' => $product['group_id'],
+            'product_id' => $product['product_id'],
+            'response' => 1,
+        ], $products);
     }
 }

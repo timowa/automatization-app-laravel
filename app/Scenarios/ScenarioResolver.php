@@ -3,6 +3,7 @@
 namespace App\Scenarios;
 
 use App\DTO\OfferChanged;
+use Illuminate\Support\Facades\Log;
 
 class ScenarioResolver
 {
@@ -20,8 +21,10 @@ class ScenarioResolver
             $scenario = new $scenarioClass;
             $rules = $scenario->rules();
             foreach ($rules as $rule) {
+
                 $ruleObj = new $rule;
-                if (!$ruleObj->passes($offerChanged)) {
+                $passes = $ruleObj->passes($offerChanged);
+                if (!$passes) {
                     continue(2);
                 }
             }

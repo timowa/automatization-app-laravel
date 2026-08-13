@@ -26,20 +26,20 @@ class PriceChangedTemplate implements VkPostTemplateInterface
 
         return <<<TEXT
             ЦЕНА СНИЖЕНА! {$title} в г. {$context->cityName}!
-             
+
             Адрес: {$context->address}{$detailsBlock}
-            
+
             Старая цена: {$oldPrice} руб.
             Новая цена: {$newPrice} руб.
             Выгода: {$diff} руб.
-            
+
             КОНТАКТЫ:
-            
+
             Агентство:  Брокер Плюс
             Агент собственника: {$context->agentName}
             📞 Телефон: {$context->agentPhone}
-            
-            #broker_plus_post_{$context->offerId}
+
+            #{$context->getHasTag()}
         TEXT;
     }
 }

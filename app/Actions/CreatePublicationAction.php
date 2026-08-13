@@ -39,13 +39,16 @@ class CreatePublicationAction
                         'status' => PublicationTaskStatus::PENDING
                     ];
                 } else {
-                    $dependedTask = $tasks[$dependsOn->value];
-                    $create = [
-                        'publication_id' => $publication->id,
-                        'type' => $type,
-                        'status' => PublicationTaskStatus::WAITING,
-                        'dependent_task_id' => $dependedTask->id
-                    ];
+                    if (isset($tasks[$dependsOn->value])) {
+                        $dependedTask = $tasks[$dependsOn->value];
+                        $create = [
+                            'publication_id' => $publication->id,
+                            'type' => $type,
+                            'status' => PublicationTaskStatus::WAITING,
+                            'dependent_task_id' => $dependedTask->id
+                        ];
+                    }
+
                 }
                 $tasks[$type->value] = PublicationTask::create($create);
 

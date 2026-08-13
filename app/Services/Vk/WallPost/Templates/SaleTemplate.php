@@ -23,18 +23,18 @@ class SaleTemplate implements VkPostTemplateInterface
 
         return <<<TEXT
             ПРОДАЕТСЯ {$title} в г. {$context->cityName}!
-             
+
             Адрес: {$context->address}{$detailsBlock}
-            
+
             {$context->getPrice()} руб.
-            
+
             КОНТАКТЫ:
-            
+
             Агентство:  Брокер Плюс
             Агент собственника: {$context->agentName}
             📞 Телефон: {$context->agentPhone}
-            
-            #broker_plus_post_{$context->offerId}
+
+            #{$context->getHasTag()}
         TEXT;
     }
 }

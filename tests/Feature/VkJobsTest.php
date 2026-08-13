@@ -15,7 +15,6 @@ use App\Jobs\CreateVkRepostJob;
 use App\Jobs\CreateVkStoriesJob;
 use App\Jobs\EditVkProductJob;
 use App\Jobs\EndVkLoopStoryJob;
-use App\Models\Agent;
 use App\Models\Offer;
 use App\Models\Publication;
 use App\Models\PublicationTask;
@@ -24,7 +23,10 @@ use App\Models\VkLoopStory;
 use App\Models\VkProduct;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
-use App\Scenarios\ScenarioFactory;
+use App\Helpers\JobResolver;
+use App\Helpers\PublicationTaskDependencyResolver;
+use App\Helpers\ScenarioVkPostTemplateResolver;
+use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\FakeVkApiService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
@@ -43,6 +45,24 @@ class VkJobsTest extends TestCase
         Queue::fake();
     }
 
+
+    private function jobDependencies(): array
+    {
+        return [
+            new PublicationTaskDependencyResolver,
+            new TaskDispatcher(new JobResolver),
+        ];
+    }
+
+    private function postJobDependencies(): array
+    {
+        return [
+            new ScenarioVkPostTemplateResolver,
+            new PublicationTaskDependencyResolver,
+            new TaskDispatcher(new JobResolver),
+        ];
+    }
+
     private function createPostTask(): PublicationTask
     {
         $offer = Offer::factory()->create();
@@ -58,16 +78,11 @@ class VkJobsTest extends TestCase
     public function test_create_vk_post_job_success(): void
     {
         $task = $this->createPostTask();
-        $job = new CreateVkPostJob(
-            $task->id,
-            new \App\Helpers\ScenarioVkPostTemplateResolver,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkPostJob($task->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
 
-        $task->fresh();
+        $task = $task->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $task->status);
         $this->assertNotNull($task->external_id);
         $this->assertDatabaseHas('vk_posts', ['offer_id' => $task->publication->offer_id]);
@@ -80,16 +95,11 @@ class VkJobsTest extends TestCase
         $publication = Publication::factory()->forOffer($offer)->create();
         $task = PublicationTask::factory()->for($publication)->ofType(PublicationTaskType::VK_POST)->create();
 
-        $job = new CreateVkPostJob(
-            $task->id,
-            new \App\Helpers\ScenarioVkPostTemplateResolver,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkPostJob($task->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
 
-        $task->fresh();
+        $task = $task->fresh();
         $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
         $this->assertStringContainsString('токен', $task->error ?? '');
     }
@@ -99,16 +109,11 @@ class VkJobsTest extends TestCase
         $task = $this->createPostTask();
         $this->vkApi->setFailNext('VKApiException', 'VK blocked');
 
-        $job = new CreateVkPostJob(
-            $task->id,
-            new \App\Helpers\ScenarioVkPostTemplateResolver,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkPostJob($task->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
 
-        $task->fresh();
+        $task = $task->fresh();
         $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
         $this->assertSame('VK blocked', $task->error);
     }
@@ -126,21 +131,18 @@ class VkJobsTest extends TestCase
             ->dependsOn($postTask)
             ->create();
 
-        $job = new CreateVkRepostJob(
-            $repostTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkRepostJob($repostTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
-        $repostTask->fresh();
+        $repostTask = $repostTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $repostTask->status);
     }
 
     public function test_create_vk_stories_job_success(): void
     {
         $postTask = $this->createPostTask();
+        $postTask->publication->offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -150,17 +152,13 @@ class VkJobsTest extends TestCase
             ->dependsOn($postTask)
             ->create();
 
-        $this->vkApi->storiesPost = ['count' => 1];
+        $this->vkApi->storiesPostResponse = ['count' => 1];
 
-        $job = new CreateVkStoriesJob(
-            $storyTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkStoriesJob($storyTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
-        $storyTask->fresh();
+        $storyTask = $storyTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $storyTask->status);
     }
 
@@ -176,15 +174,11 @@ class VkJobsTest extends TestCase
             ->dependsOn($postTask)
             ->create();
 
-        $job = new CreateVkCommentJob(
-            $commentTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkCommentJob($commentTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
-        $commentTask->fresh();
+        $commentTask = $commentTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $commentTask->status);
         $this->assertNotNull($commentTask->external_id);
     }
@@ -192,6 +186,7 @@ class VkJobsTest extends TestCase
     public function test_create_vk_loop_story_job_creates_loop_story_record(): void
     {
         $postTask = $this->createPostTask();
+        $postTask->publication->offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -201,15 +196,13 @@ class VkJobsTest extends TestCase
             ->dependsOn($postTask)
             ->create();
 
-        $job = new CreateVkLoopStoryJob(
-            $loopTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $this->vkApi->storiesPostResponse = ['count' => 1];
 
-        $job->handle($this->vkApi);
+        $job = new CreateVkLoopStoryJob($loopTask->id);
 
-        $loopTask->fresh();
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $loopTask = $loopTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $loopTask->status);
         $this->assertDatabaseHas('vk_loop_stories', [
             'offer_id' => $postTask->publication->offer_id,
@@ -227,21 +220,26 @@ class VkJobsTest extends TestCase
             'is_active' => true,
         ]);
 
+        $postTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_POST)
+            ->withStatus(PublicationTaskStatus::SUCCESS)
+            ->create();
+        $post = VkWallPost::factory()->forOffer($offer->id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id]);
+
         $task = PublicationTask::factory()
             ->for($publication)
             ->ofType(PublicationTaskType::VK_END_LOOP_STORY)
+            ->dependsOn($postTask)
             ->create();
 
-        $job = new EndVkLoopStoryJob(
-            $task->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new EndVkLoopStoryJob($task->id);
 
-        $job->handle();
+        $job->handle(...$this->jobDependencies());
 
-        $task->fresh();
-        $loopStory->fresh();
+        $task = $task->fresh();
+        $loopStory = $loopStory->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $task->status);
         $this->assertFalse($loopStory->is_active);
     }
@@ -259,17 +257,19 @@ class VkJobsTest extends TestCase
             ->dependsOn($postTask)
             ->create();
 
-        $job = new CreateVkProductJob(
-            $productTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new CreateVkProductJob($productTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
-        $productTask->fresh();
+        $productTask = $productTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $productTask->status);
         $this->assertDatabaseCount('vk_products', 2);
+
+        $uploadCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'uploadMarketPhoto');
+        $batchCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createProductsBatch');
+
+        $this->assertCount(1, $uploadCalls);
+        $this->assertCount(1, $batchCalls);
     }
 
     public function test_edit_vk_product_job_success(): void
@@ -277,11 +277,13 @@ class VkJobsTest extends TestCase
         $offer = Offer::factory()->create();
         VkUser::factory()->create(['agent_id' => $offer->agent_id]);
         $publication = Publication::factory()->forOffer($offer)->create();
+        $post = VkWallPost::factory()->forOffer($offer->id)->create();
         $parentTask = PublicationTask::factory()
             ->for($publication)
             ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
             ->withStatus(PublicationTaskStatus::SUCCESS)
             ->create();
+        $parentTask->update(['external_id' => (string) $post->id]);
         VkProduct::factory()->count(2)->create([
             'offer_id' => $offer->id,
             'agent_id' => $offer->agent_id,
@@ -295,16 +297,15 @@ class VkJobsTest extends TestCase
             ->dependsOn($parentTask)
             ->create();
 
-        $job = new EditVkProductJob(
-            $editTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new EditVkProductJob($editTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
         $editTask = $editTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $editTask->status);
+
+        $batchCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'editProductsBatch');
+        $this->assertCount(1, $batchCalls);
     }
 
     public function test_archive_vk_product_job_success(): void
@@ -312,11 +313,13 @@ class VkJobsTest extends TestCase
         $offer = Offer::factory()->create();
         VkUser::factory()->create(['agent_id' => $offer->agent_id]);
         $publication = Publication::factory()->forOffer($offer)->create();
+        $post = VkWallPost::factory()->forOffer($offer->id)->create();
         $parentTask = PublicationTask::factory()
             ->for($publication)
             ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
             ->withStatus(PublicationTaskStatus::SUCCESS)
             ->create();
+        $parentTask->update(['external_id' => (string) $post->id]);
         VkProduct::factory()->count(2)->create([
             'offer_id' => $offer->id,
             'agent_id' => $offer->agent_id,
@@ -331,13 +334,9 @@ class VkJobsTest extends TestCase
             ->dependsOn($parentTask)
             ->create();
 
-        $job = new ArchiveVkProductJob(
-            $archiveTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new ArchiveVkProductJob($archiveTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
         $archiveTask = $archiveTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $archiveTask->status);
@@ -345,26 +344,84 @@ class VkJobsTest extends TestCase
             'offer_id' => $offer->id,
             'is_archived' => false,
         ]);
+
+        $batchCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'archiveProductsBatch');
+        $this->assertCount(1, $batchCalls);
     }
 
     public function test_archive_vk_product_job_no_op_when_no_products(): void
     {
         $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
         $publication = Publication::factory()->forOffer($offer)->create();
+        $post = VkWallPost::factory()->forOffer($offer->id)->create();
+        $parentTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->withStatus(PublicationTaskStatus::SUCCESS)
+            ->create();
+        $parentTask->update(['external_id' => (string) $post->id]);
         $archiveTask = PublicationTask::factory()
             ->for($publication)
             ->ofType(PublicationTaskType::VK_ARCHIVE_PRODUCT)
+            ->dependsOn($parentTask)
             ->create();
 
-        $job = new ArchiveVkProductJob(
-            $archiveTask->id,
-            new \App\Helpers\PublicationTaskDependencyResolver,
-            new \App\Scenarios\TaskDispatcher(new \App\Helpers\JobResolver)
-        );
+        $job = new ArchiveVkProductJob($archiveTask->id);
 
-        $job->handle($this->vkApi);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
 
         $archiveTask = $archiveTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $archiveTask->status);
+    }
+
+    public function test_create_vk_product_job_chunks_large_group_lists(): void
+    {
+        VkGroup::factory()->count(30)->create();
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $productTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->dependsOn($postTask)
+            ->create();
+
+        $job = new CreateVkProductJob($productTask->id);
+
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $productTask = $productTask->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $productTask->status);
+        $this->assertDatabaseCount('vk_products', 30);
+
+        $batchCalls = array_values(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createProductsBatch'));
+        $this->assertCount(2, $batchCalls);
+        $this->assertSame(25, $batchCalls[0]['group_count']);
+        $this->assertSame(5, $batchCalls[1]['group_count']);
+    }
+
+    public function test_create_vk_product_job_fails_when_zero_products_created(): void
+    {
+        VkGroup::factory()->count(2)->create();
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $productTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->dependsOn($postTask)
+            ->create();
+
+        $this->vkApi->setFailNext('RuntimeException', 'Batch failed');
+
+        $job = new CreateVkProductJob($productTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $productTask = $productTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $productTask->status);
+        $this->assertDatabaseCount('vk_products', 0);
     }
 }

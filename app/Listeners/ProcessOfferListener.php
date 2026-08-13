@@ -37,11 +37,13 @@ class ProcessOfferListener implements ShouldQueue
         $offerChanged = new OfferChanged($prevOffer, $newOffer, $changes);
 
         $scenario = $this->scenarioResolver->resolve($offerChanged);
-        Log::channel('job')->info('Сценарий выбран', ['scenario' => $scenario?->type()->value]);
 
         if (is_null($scenario)) {
+            Log::channel('job')->warning('Сценарий не был выбран');
             return;
         }
+
+        Log::channel('job')->info('Сценарий выбран', ['scenario' => $scenario->type()->value]);
 
         $this->createPublicationAction->execute($newOffer, $scenario);
 

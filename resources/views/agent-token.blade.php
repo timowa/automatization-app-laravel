@@ -6,13 +6,14 @@
 @section('content')
     @php
         $link = 'https://oauth.vk.com/authorize?' . http_build_query([
-            'client_id' => 2685278,
-            'display' => 'mobile',
-            'redirect_uri' => 'https://oauth.vk.com/blank.html',
-            'scope' => 1040183263,
-            'response_type' => 'token',
-            'v' => '5.131',
-        ]);
+        'client_id' => 4083558,
+        'display' => 'page',
+        'redirect_uri' => 'https://oauth.vk.com/blank.html',
+        'scope' => 203374166,
+        'response_type' => 'token',
+        'v' => '5.131',
+            'revoke' => 1
+    ]);
     @endphp
 
     <div class="max-w-2xl mx-auto bg-white p-6 rounded shadow">

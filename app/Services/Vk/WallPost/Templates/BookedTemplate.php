@@ -23,19 +23,19 @@ class BookedTemplate implements VkPostTemplateInterface
 
         return <<<TEXT
             БРОНИРОВАНИЕ {$title} в г. {$context->cityName}!
-             
+
             Адрес: {$context->address}{$detailsBlock}
-            
+
             {$context->getPrice()} руб.
             Статус: забронировано
-            
+
             КОНТАКТЫ:
-            
+
             Агентство:  Брокер Плюс
             Агент собственника: {$context->agentName}
             📞 Телефон: {$context->agentPhone}
-            
-            #broker_plus_post_{$context->offerId}
+
+            #{$context->getHasTag()}
         TEXT;
     }
 }

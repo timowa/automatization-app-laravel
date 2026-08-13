@@ -16,6 +16,6 @@ class PriceDecreasedRule extends ScenarioRule
         $oldPrice = $offerChanged->previous->getBasePrice();
         $newPrice = $offerChanged->current->getBasePrice();
 
-        return ($oldPrice - $newPrice) >= 10000;
+        return $oldPrice > $newPrice;
     }
 }

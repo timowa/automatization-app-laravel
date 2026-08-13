@@ -78,39 +78,61 @@ class CreateVkProductJob implements ShouldQueue
             $context = (new VkPostContextFactory())->getContext($offer->id);
 
             $name = "{$context->getCategory()}, {$context->address}";
-            $description = "Подробности по телефону: {$context->agentPhone}\nАгент: {$context->agentName}";
+            $description = "Подробности по телефону: {$context->agentPhone}. Агент: {$context->agentName}";
             $price = $context->price;
-            $categoryId = config('vk.market_category_id', 1);
+            $categoryId = (int) config('vk.market_category_id', 1);
 
-            foreach ($groups as $group) {
+            $groupIds = $vkApi->getGroupsWithMarketForUser((int)$vkUser->vk_user_id);
+
+            foreach ($groupIds as $groupId) {
+                $photoIds = $vkApi->uploadMarketPhoto((int)$groupId, $context->images);
                 try {
-                    $result = $vkApi->createProduct(
-                        (int) $group->group_id,
+                    $results = $vkApi->createProductsBatch(
+                        (int)$groupId,
                         $name,
                         $description,
                         $price,
-                        (int) $categoryId,
-                        $context->images
+                        $categoryId,
+                        $photoIds
                     );
 
-                    VkProduct::create([
-                        'offer_id' => $offer->id,
-                        'agent_id' => $agent->id,
-                        'group_id' => (int) $group->group_id,
-                        'product_id' => (int) $result['market_item_id'],
-                        'task_id' => $this->taskId,
-                    ]);
+                    foreach ($results as $result) {
+                        $groupId = $result['group_id'] ?? null;
+                        $response = $result['response'] ?? null;
+
+                        if ($groupId === null || $response === null) {
+                            continue;
+                        }
+
+                        $productId = is_array($response)
+                            ? ($response['market_item_id'] ?? null)
+                            : (int) $response;
+
+                        if ($productId === null || $productId === 0) {
+                            Log::channel('vk')->warning('Не удалось создать товар в группе', [
+                                'group_id' => $groupId,
+                                'offer_id' => $offer->id,
+                                'response' => $response,
+                                'result' => $result,
+                            ]);
+                            continue;
+                        }
+
+                        VkProduct::create([
+                            'offer_id' => $offer->id,
+                            'agent_id' => $agent->id,
+                            'group_id' => (int) $groupId,
+                            'product_id' => (int) $productId,
+                            'task_id' => $this->taskId,
+                        ]);
+                    }
                 } catch (\Throwable $th) {
-                    Log::channel('vk')->error('Ошибка создания товара в группе', [
-                        'group_id' => $group->group_id,
+                    Log::channel('vk')->error('Ошибка создания товаров в группе ' . $groupId, [
                         'offer_id' => $offer->id,
                         'error' => $th->getMessage(),
                     ]);
-
                     continue;
                 }
-
-                usleep(350_000);
             }
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);
