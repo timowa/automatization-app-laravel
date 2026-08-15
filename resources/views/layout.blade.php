@@ -7,7 +7,7 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-100 text-gray-800">
+<body class="bg-gray-800 text-gray-800">
     <div class="min-h-screen">
         @if (session('is_admin'))
             <nav class="bg-white shadow">
