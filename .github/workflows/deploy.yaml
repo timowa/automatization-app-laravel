@@ -19,6 +19,8 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           script: |
+            export PATH=/usr/local/php/cgi/8.5/bin/:$PATH
+
             cd ~/24it.biz
 
             git config --global --add safe.directory /home/r/rabota19vk/24it.biz
@@ -26,7 +28,7 @@ jobs:
             git fetch origin
             git reset --hard origin/master
 
-            composer install \
+            ~/.local/bin/composer install \
               --no-interaction \
               --prefer-dist \
               --no-dev \
