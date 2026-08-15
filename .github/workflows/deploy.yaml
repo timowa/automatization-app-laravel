@@ -9,9 +9,10 @@ jobs:
   deploy:
     name: Deploy to Prod
     runs-on: ubuntu-latest
+
     steps:
-      - name: executing remote ssh commands
-        uses: appleboy/ssh-action@master
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
         with:
           host: rabota19vk.beget.tech
           username: rabota19vk_timowa
@@ -19,9 +20,21 @@ jobs:
           port: 22
           script: |
             cd ~/24it.biz
-            git reset --hard
-            git pull origin master
-      - name: migrate database
-        run: php artisan migrate
-      - name: run tests
-        run: php artisan test
+
+            git config --global --add safe.directory /home/r/rabota19vk/24it.biz
+
+            git fetch origin
+            git reset --hard origin/master
+
+            composer install \
+              --no-interaction \
+              --prefer-dist \
+              --no-dev \
+              --optimize-autoloader
+
+            php artisan migrate --force
+            php artisan optimize:clear
+            php artisan optimize
+
+            npm ci
+            npm run build
