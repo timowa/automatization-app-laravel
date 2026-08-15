@@ -22,7 +22,6 @@
 /storage/pail
 /vendor
 /public_html
-/.github
 _ide_helper.php
 Homestead.json
 Homestead.yaml
