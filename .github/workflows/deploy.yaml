@@ -19,7 +19,7 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: 22
           script: |
-            export PATH=/usr/local/php/cgi/8.5/bin/:$PATH
+            export PATH=/home/r/rabota19vk/.local/bin:/usr/local/php/cgi/8.5/bin:$PATH
 
             cd ~/24it.biz
 
@@ -34,9 +34,9 @@ jobs:
               --no-dev \
               --optimize-autoloader
 
+            npm ci
+            npm run build
+
             php artisan migrate --force
             php artisan optimize:clear
             php artisan optimize
-
-            npm ci
-            npm run build
