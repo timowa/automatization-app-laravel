@@ -88,7 +88,14 @@ class FakeVkApiService extends VkApiService
         return ['comment_id' => fake()->unique()->numberBetween(1, 1_000_000)];
     }
 
-    public function uploadMarketPhoto(array $imagePaths): array
+    public function getGroupsWithMarketForUser(int $userId): array
+    {
+        $groups = \App\Models\VkGroup::all();
+
+        return $groups->pluck('group_id')->toArray();
+    }
+
+    public function uploadMarketPhoto(int $groupId, array $imagePaths): array
     {
         $this->calls[] = ['method' => 'uploadMarketPhoto', 'image_count' => count($imagePaths)];
         $this->maybeFail('uploadMarketPhoto');
@@ -96,19 +103,19 @@ class FakeVkApiService extends VkApiService
         return [fake()->unique()->numberBetween(1, 1_000_000)];
     }
 
-    public function createProductsBatch(array $groupIds, string $name, string $description, int $price, int $categoryId, array $photoIds): array
+    public function createProductsBatch(int $groupId, string $name, string $description, int $price, int $categoryId, array $photoIds): array
     {
         $this->calls[] = [
             'method' => 'createProductsBatch',
-            'group_count' => count($groupIds),
+            'group_id' => $groupId,
             'photo_count' => count($photoIds),
         ];
         $this->maybeFail('createProductsBatch');
 
-        return array_map(fn ($groupId) => [
+        return [
             'group_id' => $groupId,
             'response' => ['market_item_id' => fake()->unique()->numberBetween(1, 1_000_000)],
-        ], $groupIds);
+        ];
     }
 
     public function editProductsBatch(array $products, string $name, string $description, int $price, int $categoryId): array

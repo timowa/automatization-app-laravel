@@ -72,6 +72,7 @@ class VkJobsTest extends TestCase
         return PublicationTask::factory()
             ->for($publication)
             ->ofType(PublicationTaskType::VK_POST)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
     }
 
@@ -93,7 +94,11 @@ class VkJobsTest extends TestCase
         $offer = Offer::factory()->create();
         VkUser::factory()->create(['agent_id' => $offer->agent_id, 'vk_token' => '']);
         $publication = Publication::factory()->forOffer($offer)->create();
-        $task = PublicationTask::factory()->for($publication)->ofType(PublicationTaskType::VK_POST)->create();
+        $task = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_POST)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
 
         $job = new CreateVkPostJob($task->id);
 
@@ -129,6 +134,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_REPOST)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new CreateVkRepostJob($repostTask->id);
@@ -150,6 +156,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_STORY)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $this->vkApi->storiesPostResponse = ['count' => 1];
@@ -172,6 +179,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_COMMENT)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new CreateVkCommentJob($commentTask->id);
@@ -194,6 +202,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_LOOP_STORY)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $this->vkApi->storiesPostResponse = ['count' => 1];
@@ -232,6 +241,7 @@ class VkJobsTest extends TestCase
             ->for($publication)
             ->ofType(PublicationTaskType::VK_END_LOOP_STORY)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new EndVkLoopStoryJob($task->id);
@@ -255,6 +265,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new CreateVkProductJob($productTask->id);
@@ -269,7 +280,7 @@ class VkJobsTest extends TestCase
         $batchCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createProductsBatch');
 
         $this->assertCount(1, $uploadCalls);
-        $this->assertCount(1, $batchCalls);
+        $this->assertCount(2, $batchCalls);
     }
 
     public function test_edit_vk_product_job_success(): void
@@ -295,6 +306,7 @@ class VkJobsTest extends TestCase
             ->for($publication)
             ->ofType(PublicationTaskType::VK_EDIT_PRODUCT)
             ->dependsOn($parentTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new EditVkProductJob($editTask->id);
@@ -332,6 +344,7 @@ class VkJobsTest extends TestCase
             ->for($publication)
             ->ofType(PublicationTaskType::VK_ARCHIVE_PRODUCT)
             ->dependsOn($parentTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new ArchiveVkProductJob($archiveTask->id);
@@ -365,6 +378,7 @@ class VkJobsTest extends TestCase
             ->for($publication)
             ->ofType(PublicationTaskType::VK_ARCHIVE_PRODUCT)
             ->dependsOn($parentTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new ArchiveVkProductJob($archiveTask->id);
@@ -386,6 +400,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $job = new CreateVkProductJob($productTask->id);
@@ -397,9 +412,7 @@ class VkJobsTest extends TestCase
         $this->assertDatabaseCount('vk_products', 30);
 
         $batchCalls = array_values(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createProductsBatch'));
-        $this->assertCount(2, $batchCalls);
-        $this->assertSame(25, $batchCalls[0]['group_count']);
-        $this->assertSame(5, $batchCalls[1]['group_count']);
+        $this->assertCount(30, $batchCalls);
     }
 
     public function test_create_vk_product_job_fails_when_zero_products_created(): void
@@ -413,6 +426,7 @@ class VkJobsTest extends TestCase
             ->for($postTask->publication)
             ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
             ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
         $this->vkApi->setFailNext('RuntimeException', 'Batch failed');

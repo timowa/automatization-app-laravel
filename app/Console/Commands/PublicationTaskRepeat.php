@@ -33,8 +33,13 @@ class PublicationTaskRepeat extends Command
 
         $this->info("Повторяем task #{$taskId}");
 
+        if ($task->status === PublicationTaskStatus::SUCCESS) {
+            $this->error('Задача уже выполнена');
+            return;
+        }
+
         $task->update([
-            'status' => PublicationTaskStatus::PENDING,
+            'status' => PublicationTaskStatus::QUEUED,
             'error' => null
         ]);
 
@@ -42,5 +47,6 @@ class PublicationTaskRepeat extends Command
 
         $job::dispatch($task->id);
 
+        $this->info("Task #{$taskId} поставлен в очередь");
     }
 }

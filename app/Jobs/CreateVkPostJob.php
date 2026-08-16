@@ -49,6 +49,10 @@ class CreateVkPostJob implements ShouldQueue
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
+        if ($task->status !== PublicationTaskStatus::QUEUED) {
+            return;
+        }
+
         try {
             $task->update(['status' => PublicationTaskStatus::PROCESSING]);
 

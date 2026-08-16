@@ -14,11 +14,20 @@ class TaskDispatcher
     {
 
     }
-    public function dispatch(int $publicationId)
+    public function dispatch(int $publicationId): void
     {
+        $updated = DB::table('publication_tasks')
+            ->where('publication_id', $publicationId)
+            ->where('status', PublicationTaskStatus::PENDING->value)
+            ->update(['status' => PublicationTaskStatus::QUEUED->value]);
+
+        if ($updated === 0) {
+            return;
+        }
+
         $tasks = DB::table('publication_tasks')
             ->where('publication_id', $publicationId)
-            ->where('status', PublicationTaskStatus::PENDING)
+            ->where('status', PublicationTaskStatus::QUEUED->value)
             ->get();
 
         if ($tasks->isEmpty()) {
