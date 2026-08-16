@@ -40,3 +40,5 @@ jobs:
             php artisan migrate --force
             php artisan optimize:clear
             php artisan optimize
+
+            /usr/local/php/cgi/8.5/bin/php ~/24it.biz/artisan queue:restart
