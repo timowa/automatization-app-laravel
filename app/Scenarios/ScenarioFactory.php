@@ -9,6 +9,7 @@ use App\Scenarios\Scenarios\DeletedScenario\DeletedScenario;
 use App\Scenarios\Scenarios\DelayedScenario\DelayedScenario;
 use App\Scenarios\Scenarios\FeedbackScenario\FeedbackScenario;
 use App\Scenarios\Scenarios\PriceChangedScenario\PriceChangedScenario;
+use App\Scenarios\Scenarios\RentScenario\RentScenario;
 use App\Scenarios\Scenarios\SaleScenario\SaleScenario;
 use App\Scenarios\Scenarios\SoldScenario\SoldScenario;
 use App\Scenarios\Scenarios\WithdrawnScenario\WithdrawnScenario;
@@ -22,6 +23,7 @@ class ScenarioFactory
     {
         return [
             AnnouncementScenario::class,
+            RentScenario::class,
             SaleScenario::class,
             PriceChangedScenario::class,
             AgentChangedScenario::class,

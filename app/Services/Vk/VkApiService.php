@@ -53,6 +53,7 @@ class VkApiService
             foreach ($images as $image) {
                 try {
                     $filename = downloadFile($image, storage_path('app/tmp'));
+                    $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
                     $files[] = $filename;
 
                     $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
@@ -275,6 +276,8 @@ VKSCRIPT;
                 $filename = is_file($image)
                     ? $image
                     : downloadFile($image, storage_path('app/tmp'));
+
+                $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
 
                 if (is_file($image) === false) {
                     $files[] = $filename;

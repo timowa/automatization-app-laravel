@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Deal;
 use App\Enums\OfferStatus;
 use App\Enums\PublicationTaskStatus;
 use App\Enums\PublicationTaskType;
@@ -108,6 +109,132 @@ class WebhookScenarioTest extends TestCase
         $this->assertContains(PublicationTaskType::VK_POST->value, $types);
         $this->assertContains(PublicationTaskType::VK_LOOP_STORY->value, $types);
         $this->assertContains(PublicationTaskType::VK_CREATE_PRODUCT->value, $types);
+    }
+
+    public function test_rent_offer_triggers_rent_scenario(): void
+    {
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'deal' => 'сдача',
+            'price' => 32000,
+            'deposit' => 5000,
+            'commission' => 16000,
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::first();
+        $publication = Publication::where('offer_id', $offer->id)->first();
+
+        $this->assertNotNull($publication);
+        $this->assertSame(ScenarioType::RENT->value, $publication->scenario->value);
+
+        $types = PublicationTask::where('publication_id', $publication->id)
+            ->pluck('type')
+            ->toArray();
+
+        $this->assertContains(PublicationTaskType::VK_POST->value, $types);
+        $this->assertContains(PublicationTaskType::VK_LOOP_STORY->value, $types);
+        $this->assertContains(PublicationTaskType::VK_CREATE_PRODUCT->value, $types);
+    }
+
+    public function test_rent_offer_after_announcement_triggers_rent_scenario(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 0,
+            'deal' => Deal::RENT_OUT->value,
+        ]);
+        Publication::factory()->forOffer($prevOffer)->withScenario(ScenarioType::ANNOUNCEMENT)->create();
+
+        $response = $this->postJson('/offer', $this->payload([
+            'deal' => 'сдача',
+            'price' => 32000,
+            'deposit' => 5000,
+            'commission' => 16000,
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::latest('id')->first();
+        $publication = Publication::where('offer_id', $offer->id)->first();
+
+        $this->assertNotNull($publication);
+        $this->assertSame(ScenarioType::RENT->value, $publication->scenario->value);
+    }
+
+    public function test_rent_price_decrease_triggers_price_changed_scenario(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 35000,
+            'deal' => Deal::RENT_OUT->value,
+            'deposit' => 5000,
+            'commission' => 16000,
+        ]);
+        Publication::factory()->forOffer($prevOffer)->withScenario(ScenarioType::RENT)->create();
+
+        $response = $this->postJson('/offer', $this->payload([
+            'deal' => 'сдача',
+            'price' => 30000,
+            'deposit' => 5000,
+            'commission' => 16000,
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::latest('id')->first();
+        $publication = Publication::where('offer_id', $offer->id)->first();
+
+        $this->assertNotNull($publication);
+        $this->assertSame(ScenarioType::PRICE_CHANGED->value, $publication->scenario->value);
+    }
+
+    public function test_sale_small_price_decrease_does_not_trigger_price_changed_scenario(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 1_000_000,
+            'deal' => Deal::SALE->value,
+        ]);
+        Publication::factory()->forOffer($prevOffer)->withScenario(ScenarioType::SALE)->create();
+
+        $response = $this->postJson('/offer', $this->payload([
+            'price' => 995_000,
+            'deal' => 'продажа',
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::latest('id')->first();
+        $publication = Publication::where('offer_id', $offer->id)->first();
+
+        $this->assertNull($publication);
+    }
+
+    public function test_rent_offer_without_deposit_does_not_trigger_rent_scenario(): void
+    {
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'deal' => 'сдача',
+            'price' => 32000,
+            'deposit' => null,
+            'commission' => 16000,
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::first();
+        $publication = Publication::where('offer_id', $offer->id)->first();
+
+        $this->assertNotNull($offer);
+        $this->assertNotSame(ScenarioType::RENT->value, $publication?->scenario?->value);
     }
 
     public function test_price_decrease_triggers_price_changed_scenario(): void

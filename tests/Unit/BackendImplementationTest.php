@@ -12,15 +12,16 @@ use PHPUnit\Framework\TestCase;
 
 class BackendImplementationTest extends TestCase
 {
-    public function test_scenario_factory_returns_ten_scenarios_in_order(): void
+    public function test_scenario_factory_returns_eleven_scenarios_in_order(): void
     {
         $factory = new ScenarioFactory;
         $list = $factory->list();
 
-        $this->assertCount(10, $list);
+        $this->assertCount(11, $list);
 
         $expected = [
             ScenarioType::ANNOUNCEMENT->value,
+            ScenarioType::RENT->value,
             ScenarioType::SALE->value,
             ScenarioType::PRICE_CHANGED->value,
             ScenarioType::AGENT_CHANGED->value,
@@ -72,6 +73,7 @@ class BackendImplementationTest extends TestCase
 
         $postScenarios = [
             ScenarioType::ANNOUNCEMENT,
+            ScenarioType::RENT,
             ScenarioType::SALE,
             ScenarioType::AGENT_CHANGED,
             ScenarioType::PRICE_CHANGED,

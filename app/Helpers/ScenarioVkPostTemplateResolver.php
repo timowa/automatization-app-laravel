@@ -10,6 +10,7 @@ use App\Services\Vk\WallPost\Templates\AnnouncementTemplate;
 use App\Services\Vk\WallPost\Templates\BookedTemplate;
 use App\Services\Vk\WallPost\Templates\FeedbackTemplate;
 use App\Services\Vk\WallPost\Templates\PriceChangedTemplate;
+use App\Services\Vk\WallPost\Templates\RentTemplate;
 use App\Services\Vk\WallPost\Templates\SaleTemplate;
 use App\Services\Vk\WallPost\Templates\SoldTemplate;
 
@@ -19,6 +20,7 @@ final class ScenarioVkPostTemplateResolver
     {
         return match ($scenarioType) {
             ScenarioType::ANNOUNCEMENT => new AnnouncementTemplate,
+            ScenarioType::RENT => new RentTemplate,
             ScenarioType::SALE => new SaleTemplate,
             ScenarioType::AGENT_CHANGED => new SaleTemplate,
             ScenarioType::PRICE_CHANGED => new PriceChangedTemplate,

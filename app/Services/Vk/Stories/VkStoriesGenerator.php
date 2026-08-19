@@ -77,6 +77,7 @@ class VkStoriesGenerator
             );
 
             copy($url, $imagePath);
+            $imagePath = (new \App\Helpers\ImageWatermarker)->apply($imagePath);
             $insertImage = $manager->decodePath($imagePath);
             $insertImage->cover(width: 900, height: 600);
             $img->insert($insertImage, 0, 200, 'center');

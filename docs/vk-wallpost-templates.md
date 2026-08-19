@@ -70,6 +70,7 @@ VkPostGenerator::generate(context, template) → string
 | ScenarioType | Template |
 |---|---|
 | `ANNOUNCEMENT` | `AnnouncementTemplate` |
+| `RENT` | `RentTemplate` |
 | `SALE` | `SaleTemplate` |
 | `AGENT_CHANGED` | `SaleTemplate` |
 | `PRICE_CHANGED` | `PriceChangedTemplate` |
@@ -121,6 +122,6 @@ VkPostGenerator::generate(context, template) → string
 
 **Файл:** `app/Services/Vk/WallPost/Templates/RentTemplate.php`
 
-Текст аренды: "СДАЕТСЯ". Включает комиссию и залог. Хештег `#broker_plus_rent_{offerId}`.
+Текст аренды: "СДАЕТСЯ". Включает комиссию, залог и детали объекта. Хештег `#broker_plus_rent_{code}`.
 
-> RentTemplate существует, но не используется в `ScenarioVkPostTemplateResolver` — нет сценария аренды.
+Подключён к сценарию `RENT` через `ScenarioVkPostTemplateResolver`.

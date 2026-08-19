@@ -3,6 +3,7 @@
 namespace App\Scenarios\Rules;
 
 use App\DTO\OfferChanged;
+use App\Enums\Deal;
 use App\Scenarios\ScenarioRule;
 
 class PriceDecreasedRule extends ScenarioRule
@@ -16,6 +17,16 @@ class PriceDecreasedRule extends ScenarioRule
         $oldPrice = $offerChanged->previous->getBasePrice();
         $newPrice = $offerChanged->current->getBasePrice();
 
-        return $oldPrice > $newPrice;
+        if ($oldPrice <= $newPrice) {
+            return false;
+        }
+
+        $deal = $offerChanged->current->deal();
+
+        if ($deal === Deal::RENT_OUT) {
+            return true;
+        }
+
+        return ($oldPrice - $newPrice) >= 10_000;
     }
 }

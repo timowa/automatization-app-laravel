@@ -48,15 +48,16 @@ ScenarioResolver → Scenario
 
 Порядок:
 1. `AnnouncementScenario`
-2. `SaleScenario`
-3. `PriceChangedScenario`
-4. `AgentChangedScenario`
-5. `BookedScenario`
-6. `SoldScenario`
-7. `FeedbackScenario`
-8. `WithdrawnScenario`
-9. `DelayedScenario`
-10. `DeletedScenario`
+2. `RentScenario`
+3. `SaleScenario`
+4. `PriceChangedScenario`
+5. `AgentChangedScenario`
+6. `BookedScenario`
+7. `SoldScenario`
+8. `FeedbackScenario`
+9. `WithdrawnScenario`
+10. `DelayedScenario`
+11. `DeletedScenario`
 
 ### ScenarioResolver
 
@@ -148,7 +149,7 @@ ScenarioResolver → Scenario
 Тип: `ScenarioType::SALE`
 
 Правила:
-- `NewOfferOrAnnouncementRule` — первый оффер или предыдущая публикация со сценарием ANNOUNCEMENT или SALE.
+- `NewOfferOrAnnouncementRule` — первый оффер или предыдущая публикация со сценарием ANNOUNCEMENT.
 - `ActiveStatusRule` — статус ACTIVE.
 
 Задачи: `VK_POST`, `VK_REPOST`, `VK_LOOP_STORY`, `VK_COMMENT`, `VK_CREATE_PRODUCT`.
@@ -157,7 +158,24 @@ ScenarioResolver → Scenario
 
 **NewOfferOrAnnouncementRule:** `app/Scenarios/SaleScenario/Rules/NewOfferOrAnnouncementRule.php` — если `previous === null` (true), иначе проверяет что предыдущая публикация имела сценарий ANNOUNCEMENT или SALE.
 
-### 3. PriceChangedScenario (Изменилась цена)
+### 3. RentScenario (Сдача в аренду)
+
+**Файл:** `app/Scenarios/RentScenario/RentScenario.php`
+
+Тип: `ScenarioType::RENT`
+
+Правила:
+- `NewOfferOrAnnouncementRule` — первый оффер или предыдущая публикация со сценарием ANNOUNCEMENT.
+- `ActiveStatusRule` — статус ACTIVE.
+- `OfferHasPrice` — цена больше 0.
+- `DealIsRentOutRule` — тип сделки `RENT_OUT` ("сдача").
+- `HasDepositAndCommissionRule` — заполнены `deposit` и `commission`.
+
+Задачи: `VK_POST`, `VK_REPOST`, `VK_LOOP_STORY`, `VK_COMMENT`, `VK_CREATE_PRODUCT`.
+
+Шаблон поста: `RentTemplate`.
+
+### 4. PriceChangedScenario (Изменилась цена)
 
 **Файл:** `app/Scenarios/PriceChangedScenario/PriceChangedScenario.php`
 
@@ -165,14 +183,14 @@ ScenarioResolver → Scenario
 
 Правила:
 - `PreviousPublicationRule` — была публикация.
-- `PriceDecreasedRule` — цена снизилась на 10 000+.
+- `PriceDecreasedRule` — цена снизилась. Для SALE — на 10 000+, для RENT_OUT — на любую сумму.
 - `ActiveStatusRule` — статус ACTIVE.
 
 Задачи: `VK_POST`, `VK_REPOST`, `VK_LOOP_STORY`, `VK_COMMENT`, `VK_EDIT_PRODUCT`.
 
 Шаблон поста: `PriceChangedTemplate`.
 
-**PriceDecreasedRule:** `app/Scenarios/PriceChangedScenario/Rules/PriceDecreasedRule.php` — сравнивает `getBasePrice()` предыдущего и текущего оффера, проверяет `(oldPrice - newPrice) >= 10000`.
+**PriceDecreasedRule:** `app/Scenarios/PriceChangedScenario/Rules/PriceDecreasedRule.php` — сравнивает `getBasePrice()` предыдущего и текущего оффера. Для SALE проверяет `(oldPrice - newPrice) >= 10000`, для RENT_OUT возвращает true при любом снижении.
 
 ### 4. AgentChangedScenario (Изменился агент)
 

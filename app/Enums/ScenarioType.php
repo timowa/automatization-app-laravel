@@ -5,6 +5,7 @@ namespace App\Enums;
 enum ScenarioType: string
 {
     case ANNOUNCEMENT = 'announcement';
+    case RENT = 'rent';
     case SALE = 'sale';
     case PRICE_CHANGED = 'price_changed';
     case AGENT_CHANGED = 'agent_changed';

@@ -12,8 +12,8 @@ class RentTemplate implements VkPostTemplateInterface
     public function generate(VkPostContext $context): string
     {
         $commissionLine = $context->getCommission() !== null
-            ? "Комиссия агентства: {$context->getCommission()} руб."
-            : 'Комиссия агентства: уточняйте';
+            ? "Комиссия: {$context->getCommission()} руб."
+            : 'Комиссия: уточняйте';
 
         $depositLine = $context->getDeposit() !== null
             ? "Залог: {$context->getDeposit()} руб."
@@ -22,7 +22,7 @@ class RentTemplate implements VkPostTemplateInterface
         $rooms = ($roomsValue = $context->getRooms()) !== null ? "Комнаты: {$roomsValue}" : '';
         $area = ($areaValue = $context->getArea()) !== null ? "Общая площадь: {$areaValue}" : '';
         $kitchenArea = ($kitchenValue = $context->getKitchenArea()) !== null ? "Площадь кухни: {$kitchenValue}" : '';
-        $floorLine = ($floorValue = $context->getFloorLine()) !== null ? $floorValue : '';
+        $floorLine = $context->getFloorLine() ?? '';
 
         $details = array_filter([$rooms, $area, $kitchenArea, $floorLine]);
         $detailsBlock = $details !== [] ? "\n" . implode("\n", $details) : '';
