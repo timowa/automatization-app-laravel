@@ -11,6 +11,7 @@ enum ScenarioType: string
     case AGENT_CHANGED = 'agent_changed';
     case BOOKING = 'booking';
     case SOLD = 'sold';
+    case RENT_OUT = 'rent_out';
     case FEEDBACK = 'feedback';
     case WITHDRAWN = 'withdrawn';
     case DELAYED = 'delayed';

@@ -112,4 +112,15 @@ class VkPostContext
         $code = str_replace('-', '_', $this->code);
         return $tag . $code;
     }
+
+    public function getDeclensedStatus(string $word): string
+    {
+        $femaleCategories = [Category::APARTMENT, Category::ROOM, Category::NEW_BUILDING];
+
+        if (in_array($this->category, $femaleCategories, true)) {
+            return mb_substr($word, 0, -1) . 'а';
+        }
+
+        return mb_substr($word, 0, -1);
+    }
 }

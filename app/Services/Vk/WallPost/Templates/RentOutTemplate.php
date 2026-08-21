@@ -7,7 +7,7 @@ namespace App\Services\Vk\WallPost\Templates;
 use App\Interfaces\VkPostTemplateInterface;
 use App\Services\Vk\WallPost\VkPostContext;
 
-class SoldTemplate implements VkPostTemplateInterface
+class RentOutTemplate implements VkPostTemplateInterface
 {
     public function generate(VkPostContext $context): string
     {
@@ -20,14 +20,14 @@ class SoldTemplate implements VkPostTemplateInterface
         $detailsBlock = $details !== [] ? "\n" . implode("\n", $details) : '';
 
         $title = mb_strtoupper($context->getCategory());
-        $status = mb_strtoupper($context->getDeclensedStatus('Продано'));
+        $status = mb_strtoupper($context->getDeclensedStatus('Сдано'));
 
         return <<<TEXT
             {$status} {$title} в г. {$context->cityName}!
 
             Адрес: {$context->address}{$detailsBlock}
 
-            {$context->getPrice()} руб.
+            Аренда: {$context->getPrice()} руб./мес.
 
             КОНТАКТЫ:
 

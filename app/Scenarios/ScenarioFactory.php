@@ -9,6 +9,7 @@ use App\Scenarios\Scenarios\DeletedScenario\DeletedScenario;
 use App\Scenarios\Scenarios\DelayedScenario\DelayedScenario;
 use App\Scenarios\Scenarios\FeedbackScenario\FeedbackScenario;
 use App\Scenarios\Scenarios\PriceChangedScenario\PriceChangedScenario;
+use App\Scenarios\Scenarios\RentOutScenario\RentOutScenario;
 use App\Scenarios\Scenarios\RentScenario\RentScenario;
 use App\Scenarios\Scenarios\SaleScenario\SaleScenario;
 use App\Scenarios\Scenarios\SoldScenario\SoldScenario;
@@ -29,6 +30,7 @@ class ScenarioFactory
             AgentChangedScenario::class,
             BookedScenario::class,
             SoldScenario::class,
+            RentOutScenario::class,
             FeedbackScenario::class,
             WithdrawnScenario::class,
             DelayedScenario::class,

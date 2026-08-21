@@ -10,6 +10,7 @@ use App\Services\Vk\WallPost\Templates\AnnouncementTemplate;
 use App\Services\Vk\WallPost\Templates\BookedTemplate;
 use App\Services\Vk\WallPost\Templates\FeedbackTemplate;
 use App\Services\Vk\WallPost\Templates\PriceChangedTemplate;
+use App\Services\Vk\WallPost\Templates\RentOutTemplate;
 use App\Services\Vk\WallPost\Templates\RentTemplate;
 use App\Services\Vk\WallPost\Templates\SaleTemplate;
 use App\Services\Vk\WallPost\Templates\SoldTemplate;
@@ -26,6 +27,7 @@ final class ScenarioVkPostTemplateResolver
             ScenarioType::PRICE_CHANGED => new PriceChangedTemplate,
             ScenarioType::BOOKING => new BookedTemplate,
             ScenarioType::SOLD => new SoldTemplate,
+            ScenarioType::RENT_OUT => new RentOutTemplate,
             ScenarioType::FEEDBACK => new FeedbackTemplate,
             default => throw new \Exception('Неподдерживаемый сценарий для шаблона поста'),
         };

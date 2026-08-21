@@ -1,25 +1,25 @@
 <?php
 
-namespace App\Scenarios\Scenarios\SoldScenario;
+namespace App\Scenarios\Scenarios\RentOutScenario;
 
 use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
 use App\Scenarios\Rules\ArchiveStatusRule;
 use App\Scenarios\Rules\FirstArchiveRecordRule;
-use App\Scenarios\Rules\PreviousSalePublicationRule;
+use App\Scenarios\Rules\PreviousRentPublicationRule;
 use App\Scenarios\Scenario;
 
-class SoldScenario extends Scenario
+class RentOutScenario extends Scenario
 {
     public function type(): ScenarioType
     {
-        return ScenarioType::SOLD;
+        return ScenarioType::RENT_OUT;
     }
 
     public function rules(): array
     {
         return [
-            PreviousSalePublicationRule::class,
+            PreviousRentPublicationRule::class,
             ArchiveStatusRule::class,
             FirstArchiveRecordRule::class,
         ];
