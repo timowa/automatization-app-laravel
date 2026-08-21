@@ -76,7 +76,8 @@ class VkApiService
             'owner_id' => $ownerId,
             'message' => $message,
             'attachments' => $attachments,
-            'close_comments' => 0
+            'close_comments' => 0,
+            'primary_attachments_mode' => 'grid'
         ]);
 
         foreach ($files as $file) {
