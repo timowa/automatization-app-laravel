@@ -16,7 +16,7 @@ class OfferFactory extends Factory
     {
         return [
             'offer_id' => fake()->unique()->numberBetween(1, 1_000_000),
-            'code' => (string) fake()->unique()->numberBetween(100, 999) . '-' . fake()->numberBetween(1, 999),
+            'code' => (string) fake()->unique()->numberBetween(100, 999).'-'.fake()->numberBetween(1, 999),
             'stage' => 3,
             'status' => 1,
             'city' => 2,
@@ -56,6 +56,11 @@ class OfferFactory extends Factory
     public function withAgent(int $agentId): static
     {
         return $this->state(fn () => ['agent_id' => $agentId]);
+    }
+
+    public function withDeal(int $deal): static
+    {
+        return $this->state(fn () => ['deal' => $deal]);
     }
 
     public function withPrice(int $price): static

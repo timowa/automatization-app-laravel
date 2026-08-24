@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\Deal;
 use App\Enums\OfferStatus;
 use App\Models\Agent;
 use App\Models\Offer;
 use App\Models\VkUser;
+use App\Services\Llm\WeeklySummaryLlmGenerator;
 use App\Services\Vk\VkApiService;
-use App\Services\Vk\WallPost\Templates\WeeklySummaryTemplate;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use VK\Exceptions\VKApiException;
 
@@ -30,19 +32,19 @@ class PublishWeeklySummaryJob implements ShouldQueue
 
     public function __construct(
         public readonly int $agentId
-    ) {
-    }
+    ) {}
 
-    public function handle(VkApiService $vkApi): void
+    public function handle(VkApiService $vkApi, WeeklySummaryLlmGenerator $llmGenerator): void
     {
         $agent = Agent::findOrFail($this->agentId);
 
         /** @var VkUser|null $vkUser */
         $vkUser = $agent->vkUser;
-        if (!$vkUser || $vkUser->getToken() === '') {
+        if (! $vkUser || $vkUser->getToken() === '') {
             Log::channel('job')->warning('Токен недоступен для еженедельной сводки', [
                 'agent_id' => $this->agentId,
             ]);
+
             return;
         }
 
@@ -52,7 +54,13 @@ class PublishWeeklySummaryJob implements ShouldQueue
             return;
         }
 
-        $closedCount = $this->closedCount($agent->id);
+        $to = Carbon::now();
+        $from = Carbon::now()->subDays(7);
+
+        $activeSale = $this->countByDeal($agent->id, OfferStatus::ACTIVE, Deal::SALE);
+        $activeRent = $this->countByDeal($agent->id, OfferStatus::ACTIVE, Deal::RENT_OUT);
+        $completedSold = $this->countClosedByDeal($agent->id, Deal::SALE);
+        $completedRented = $this->countClosedByDeal($agent->id, Deal::RENT_OUT);
 
         $images = [];
         foreach ($activeOffers as $offer) {
@@ -61,12 +69,23 @@ class PublishWeeklySummaryJob implements ShouldQueue
             }
 
             $offerImages = $offer->images ?? [];
-            if (!empty($offerImages)) {
+            if (! empty($offerImages)) {
                 $images[] = $offerImages[0];
             }
         }
 
-        $message = (new WeeklySummaryTemplate())->generate($activeOffers, $closedCount, $agent);
+        try {
+            $message = $llmGenerator->generate($agent, $from, $to, $activeSale, $activeRent, $completedSold, $completedRented);
+        } catch (\Throwable $e) {
+            Log::channel('job')->warning('Ошибка LLM генерации еженедельной сводки', [
+                'agent_id' => $agent->id,
+            ]);
+            Log::channel('llm')->error($e->getMessage(), [
+                'agent_id' => $agent->id,
+            ]);
+
+            return;
+        }
 
         try {
             $vkApi->setToken($vkUser->getToken());
@@ -74,8 +93,10 @@ class PublishWeeklySummaryJob implements ShouldQueue
 
             Log::channel('job')->info('Еженедельная сводка опубликована', [
                 'agent_id' => $agent->id,
-                'active_count' => $activeOffers->count(),
-                'closed_count' => $closedCount,
+                'active_sale' => $activeSale,
+                'active_rent' => $activeRent,
+                'completed_sold' => $completedSold,
+                'completed_rented' => $completedRented,
             ]);
 
             if (empty($result['post_id'])) {
@@ -101,7 +122,7 @@ class PublishWeeklySummaryJob implements ShouldQueue
         }
     }
 
-    private function activeOffers(int $agentId): \Illuminate\Support\Collection
+    private function activeOffers(int $agentId): Collection
     {
         return Offer::where('agent_id', $agentId)
             ->where('status', OfferStatus::ACTIVE->value)
@@ -110,10 +131,20 @@ class PublishWeeklySummaryJob implements ShouldQueue
             ->values();
     }
 
-    private function closedCount(int $agentId): int
+    private function countByDeal(int $agentId, OfferStatus $status, Deal $deal): int
+    {
+        return (int) Offer::where('agent_id', $agentId)
+            ->where('status', $status->value)
+            ->where('deal', $deal->value)
+            ->distinct('code')
+            ->count('code');
+    }
+
+    private function countClosedByDeal(int $agentId, Deal $deal): int
     {
         return (int) Offer::where('agent_id', $agentId)
             ->where('status', OfferStatus::ARCHIVE->value)
+            ->where('deal', $deal->value)
             ->where('created_at', '>=', Carbon::now()->subDays(7))
             ->distinct('code')
             ->count('code');

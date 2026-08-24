@@ -67,7 +67,12 @@ class VkApiService
 
                     $attachments[] = 'photo' . $saveResponse['owner_id'] . '_' . $saveResponse['id'];
                 } catch (\Throwable $th) {
-                    Log::channel('vk')->error($th->getMessage());
+                    Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте' . $th->getMessage(), [
+                        'image_original_url' => $image,
+                        'image_local_name' => $filename ?? null,
+                        'vk_response_upload' => $photo ?? null,
+                        'vk_response_save' => $saveResponse ?? null
+                    ]);
                     continue;
                 }
             }
