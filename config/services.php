@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'ollama' => [
+        'api_key' => env('OLLAMA_API_KEY'),
+        'base_url' => env('OLLAMA_BASE_URL', 'https://api.ollama.com'),
+        'model' => env('OLLAMA_MODEL', 'deepseek-v4-flash'),
+    ],
+
 ];

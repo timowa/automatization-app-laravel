@@ -41,7 +41,7 @@ class VkApiService
      * @throws VKApiException
      * @throws VKApiWallDonutException
      */
-    public function wallPost(int $ownerId, string $message, array $images = []): array
+    public function wallPost(int $ownerId, string $message, array $images = [], string $imageCaption = ''): array
     {
         $attachments = [];
         $files = [];
@@ -62,11 +62,17 @@ class VkApiService
                         'photo' => $photo['photo'],
                         'hash' => $photo['hash'],
                         'user_id' => $ownerId,
+                        'caption' => $imageCaption
                     ])[0];
 
                     $attachments[] = 'photo' . $saveResponse['owner_id'] . '_' . $saveResponse['id'];
                 } catch (\Throwable $th) {
-                    Log::channel('vk')->error($th->getMessage());
+                    Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте' . $th->getMessage(), [
+                        'image_original_url' => $image,
+                        'image_local_name' => $filename ?? null,
+                        'vk_response_upload' => $photo ?? null,
+                        'vk_response_save' => $saveResponse ?? null
+                    ]);
                     continue;
                 }
             }
@@ -354,17 +360,6 @@ VKSCRIPT;
             'photo_ids' => $photoIdsStr,
             'owner_id' => '-' . $groupId,
         ]);
-
-        Log::channel('vk')->error('res', ['res' => $res, 'params' => [
-            'name' => $name,
-            'description' => $description,
-            'price' => $price,
-            'category_id' => $categoryId,
-            'photo' => $mainPhotoId,
-            'main_photo_id' => $photoIdsStr,
-            'photo_ids' => $photoIdsStr,
-            'owner_id' => '-' . $groupId,
-        ]]);
 
         return $res;
 

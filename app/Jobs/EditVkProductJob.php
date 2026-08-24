@@ -74,7 +74,7 @@ class EditVkProductJob implements ShouldQueue
             $context = (new VkPostContextFactory())->getContext($offer->id);
 
             $name = "{$context->getCategory()}, {$context->address}";
-            $description = "Подробности по телефону: {$context->agentPhone}\nАгент: {$context->agentName}";
+            $description = "Подробности по телефону: {$context->getAgentPhone()}\nАгент: {$context->agentName}";
             $price = $context->price;
             $categoryId = (int) config('vk.market_category_id', 1);
 

@@ -84,6 +84,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'llm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/llm/error.log'),
+            'level' => 'warning',
+            'days' => 7,
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

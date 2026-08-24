@@ -20,11 +20,12 @@ class RentTemplate implements VkPostTemplateInterface
             : 'Залог: уточняйте';
 
         $rooms = ($roomsValue = $context->getRooms()) !== null ? "Комнаты: {$roomsValue}" : '';
-        $area = ($areaValue = $context->getArea()) !== null ? "Общая площадь: {$areaValue}" : '';
+        $livingArea = ($livingValue = $context->getLivingArea()) !== null ? "Жилая площадь: {$livingValue}" : '';
         $kitchenArea = ($kitchenValue = $context->getKitchenArea()) !== null ? "Площадь кухни: {$kitchenValue}" : '';
+        $area = ($areaValue = $context->getArea()) !== null ? "Общая площадь: {$areaValue}" : '';
         $floorLine = $context->getFloorLine() ?? '';
 
-        $details = array_filter([$rooms, $area, $kitchenArea, $floorLine]);
+        $details = array_filter([$rooms, $livingArea, $kitchenArea, $area, $floorLine]);
         $detailsBlock = $details !== [] ? "\n" . implode("\n", $details) : '';
 
         $title = mb_strtoupper($context->getCategory());
@@ -42,7 +43,7 @@ class RentTemplate implements VkPostTemplateInterface
 
             Агентство: Брокер Плюс
             Агент: {$context->agentName}
-            📞 Телефон: {$context->agentPhone}
+            📞 Звоните: {$context->getAgentPhone()}
 
             #{$context->getHasTag()}
         TEXT;

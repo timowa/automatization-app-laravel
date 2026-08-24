@@ -23,6 +23,7 @@ class VkPostContextFactory
             address: $offer->getAddressFromLocation(),
             rooms: (int) $offer->rooms,
             area: (float) $offer->area,
+            livingArea: $offer->living_area,
             kitchenArea: $offer->kitchen_area,
             floor: $offer->floor,
             floorsTotal: $offer->floors_total,
