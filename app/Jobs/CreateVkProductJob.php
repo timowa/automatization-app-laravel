@@ -82,7 +82,7 @@ class CreateVkProductJob implements ShouldQueue
             $context = (new VkPostContextFactory())->getContext($offer->id);
 
             $name = "{$context->getCategory()}, {$context->address}";
-            $description = "Подробности по телефону: {$context->agentPhone}. Агент: {$context->agentName}";
+            $description = "Подробности по телефону: {$context->getAgentPhone()}. Агент: {$context->agentName}";
             $price = $context->price;
             $categoryId = (int) config('vk.market_category_id', 1);
 

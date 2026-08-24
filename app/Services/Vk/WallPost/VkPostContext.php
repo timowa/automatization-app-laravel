@@ -13,6 +13,7 @@ class VkPostContext
         public string $address,
         public int $rooms,
         public float $area,
+        public ?float $livingArea,
         public ?float $kitchenArea,
         public ?int $floor,
         public ?int $floorsTotal,
@@ -49,6 +50,11 @@ class VkPostContext
     public function getDeposit(): ?string
     {
         return $this->deposit !== null ? formatPrice($this->deposit) : null;
+    }
+
+    public function getLivingArea(): ?string
+    {
+        return $this->livingArea !== null && $this->livingArea > 0 ? formatArea($this->livingArea) : null;
     }
 
     public function getArea(): ?string
@@ -89,10 +95,6 @@ class VkPostContext
             return "Этаж: {$floor}";
         }
 
-        if ($total !== null) {
-            return "Этажей в доме: {$total}";
-        }
-
         return null;
     }
 
@@ -122,5 +124,23 @@ class VkPostContext
         }
 
         return mb_substr($word, 0, -1);
+    }
+
+    public function getAgentPhone(): string
+    {
+        if (str_starts_with($this->agentPhone, '+')) {
+            return $this->agentPhone;
+        }
+
+        return '+' . $this->agentPhone;
+    }
+
+    public function getImageCaption(): string
+    {
+        return sprintf('г. %s, %s. Номер агента: %s',
+        $this->cityName,
+        $this->address,
+        $this->getAgentPhone()
+        );
     }
 }

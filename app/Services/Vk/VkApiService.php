@@ -41,7 +41,7 @@ class VkApiService
      * @throws VKApiException
      * @throws VKApiWallDonutException
      */
-    public function wallPost(int $ownerId, string $message, array $images = []): array
+    public function wallPost(int $ownerId, string $message, array $images = [], string $imageCaption = ''): array
     {
         $attachments = [];
         $files = [];
@@ -62,6 +62,7 @@ class VkApiService
                         'photo' => $photo['photo'],
                         'hash' => $photo['hash'],
                         'user_id' => $ownerId,
+                        'caption' => $imageCaption
                     ])[0];
 
                     $attachments[] = 'photo' . $saveResponse['owner_id'] . '_' . $saveResponse['id'];
@@ -354,17 +355,6 @@ VKSCRIPT;
             'photo_ids' => $photoIdsStr,
             'owner_id' => '-' . $groupId,
         ]);
-
-        Log::channel('vk')->error('res', ['res' => $res, 'params' => [
-            'name' => $name,
-            'description' => $description,
-            'price' => $price,
-            'category_id' => $categoryId,
-            'photo' => $mainPhotoId,
-            'main_photo_id' => $photoIdsStr,
-            'photo_ids' => $photoIdsStr,
-            'owner_id' => '-' . $groupId,
-        ]]);
 
         return $res;
 

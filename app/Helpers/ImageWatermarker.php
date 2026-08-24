@@ -13,8 +13,8 @@ class ImageWatermarker
 {
     private const LOGO_PATH = __DIR__ . '/../../storage/app/assets/images/brokerplus_logo.jpg';
     private const OPACITY = 60;
-    private const LOGO_WIDTH_RATIO = 0.15;
-    private const MARGIN = 10;
+    private const LOGO_WIDTH_RATIO = 0.2;
+    private const MARGIN = 15;
 
     public function apply(string $imagePath): string
     {

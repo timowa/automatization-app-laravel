@@ -24,7 +24,7 @@ class AnnouncementTemplate implements VkPostTemplateInterface
 
         Агентство: Брокер Плюс
         Агент собственника: {$context->agentName}
-        📞 Телефон (вайбер, ватсап): {$context->agentPhone}
+        📞 Звоните: {$context->getAgentPhone()}
 
         --
         Уважаемый покупатель!

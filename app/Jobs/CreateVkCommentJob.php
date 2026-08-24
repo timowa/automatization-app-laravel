@@ -12,7 +12,8 @@ use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
-use App\Services\Vk\VkApiService;
+use App\Services\VK\Comment\CommentTextProvider;
+use App\Services\VK\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -38,7 +39,8 @@ class CreateVkCommentJob implements ShouldQueue
 
     public function handle(VkApiService $vkApi,
                            PublicationTaskDependencyResolver $taskDependencyResolver,
-                           TaskDispatcher $taskDispatcher): void
+                           TaskDispatcher $taskDispatcher,
+                           CommentTextProvider $commentTextProvider): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
@@ -72,7 +74,7 @@ class CreateVkCommentJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $message = "Подробности по объекту уточняйте у агента в личных сообщениях 📩";
+            $message = $commentTextProvider->getRandomText();
 
             $result = $vkApi->createComment((int) $post->owner_id, (int) $post->post_id, $message);
 

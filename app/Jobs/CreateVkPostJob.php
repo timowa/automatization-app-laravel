@@ -80,8 +80,9 @@ class CreateVkPostJob implements ShouldQueue
             $context = (new VkPostContextFactory())->getContext($offer->id);
             $template = $templateResolver->resolve($task->publication->scenario);
             $message = (new VkPostGenerator())->generate($context, $template);
+            $imageCaption = $context->getImageCaption();
 
-            $res = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $context->images);
+            $res = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $context->images, $imageCaption);
 
             $post = VkWallPost::create([
                 'offer_id' => $offer->id,

@@ -53,9 +53,9 @@ class FakeVkApiService extends VkApiService
         throw new \RuntimeException($this->failMessage);
     }
 
-    public function wallPost(int $ownerId, string $message, array $images = []): array
+    public function wallPost(int $ownerId, string $message, array $images = [], string $imageCaption = ''): array
     {
-        $this->calls[] = ['method' => 'wallPost', 'owner_id' => $ownerId];
+        $this->calls[] = ['method' => 'wallPost', 'owner_id' => $ownerId, 'message' => $message];
         $this->maybeFail('wallPost');
 
         return ['post_id' => fake()->unique()->numberBetween(1, 1_000_000)];
