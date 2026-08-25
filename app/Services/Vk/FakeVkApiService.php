@@ -71,7 +71,7 @@ class FakeVkApiService extends VkApiService
 
     public function createReposts(int $userId, string $postId, array $groupIds): array
     {
-        $this->calls[] = ['method' => 'createReposts', 'post_id' => $postId];
+        $this->calls[] = ['method' => 'createReposts', 'post_id' => $postId, 'args' => $groupIds];
         $this->maybeFail('createReposts');
 
         return array_map(fn ($groupId) => [
@@ -113,8 +113,7 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('createProductsBatch');
 
         return [
-            'group_id' => $groupId,
-            'response' => ['market_item_id' => fake()->unique()->numberBetween(1, 1_000_000)],
+            ['group_id' => $groupId, 'response' => ['market_item_id' => fake()->unique()->numberBetween(1, 1_000_000)]],
         ];
     }
 

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\City;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
@@ -72,9 +73,33 @@ class CreateVkProductJob implements ShouldQueue
                 throw new NotFoundException('Для агента не задан токен');
             }
 
-            $groups = VkGroup::all();
-            if ($groups->isEmpty()) {
-                throw new NotFoundException('Список групп пуст');
+            $offerCity = $offer->city();
+            if ($offerCity === null) {
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Товары не созданы: у оффера не указан город', [
+                    'offer' => $offer->code,
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
+            }
+
+            $acceptingCityValues = array_filter(
+                City::cases(),
+                fn (City $c) => in_array($offerCity, $c->acceptedCities(), true)
+            );
+            $acceptingCityValues = array_map(fn (City $c) => $c->value, $acceptingCityValues);
+
+            $cityGroupIds = VkGroup::whereIn('city', $acceptingCityValues)->pluck('group_id')->toArray();
+            if (empty($cityGroupIds)) {
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Товары не созданы: нет групп для города', [
+                    'offer' => $offer->code,
+                    'city' => $offerCity->label(),
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
             }
 
             $vkApi->setToken($vkUser->getToken());
@@ -86,7 +111,19 @@ class CreateVkProductJob implements ShouldQueue
             $price = $context->price;
             $categoryId = (int) config('vk.market_category_id', 1);
 
-            $groupIds = $vkApi->getGroupsWithMarketForUser((int)$vkUser->vk_user_id);
+            $vkGroupIds = $vkApi->getGroupsWithMarketForUser((int)$vkUser->vk_user_id);
+            $groupIds = array_values(array_intersect($cityGroupIds, $vkGroupIds));
+
+            if (empty($groupIds)) {
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Товары не созданы: нет доступных групп с market для города', [
+                    'offer' => $offer->code,
+                    'city' => $offerCity->label(),
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
+            }
 
             foreach ($groupIds as $groupId) {
                 $photoIds = $vkApi->uploadMarketPhoto((int)$groupId, $context->images);

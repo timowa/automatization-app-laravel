@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Enums\City;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
@@ -61,9 +62,34 @@ class CreateVkRepostJob implements ShouldQueue
                 throw new NotFoundException('Оффер для поста не найден');
             }
 
-            $groups = VkGroup::all();
+            $offerCity = $offer->city();
+            if ($offerCity === null) {
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Репост не выполнен: у оффера не указан город', [
+                    'offer' => $offer->code,
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
+            }
+
+            // Найти city групп, которые принимают город оффера
+            $acceptingCityValues = array_filter(
+                City::cases(),
+                fn (City $c) => in_array($offerCity, $c->acceptedCities(), true)
+            );
+            $acceptingCityValues = array_map(fn (City $c) => $c->value, $acceptingCityValues);
+
+            $groups = VkGroup::whereIn('city', $acceptingCityValues)->get();
             if ($groups->isEmpty()) {
-                throw new NotFoundException('Список групп пуст');
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Репост не выполнен: нет групп для города', [
+                    'offer' => $offer->code,
+                    'city' => $offerCity->label(),
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+                return;
             }
 
             $agent = $offer->agent;
@@ -78,11 +104,14 @@ class CreateVkRepostJob implements ShouldQueue
             $vkApi->setToken($vkUser->getToken());
             $result = $vkApi->createReposts((int) $vkUser->vk_user_id, $post->getFullId(), $groupIds);
 
+            $successGroupIds = [];
+
             foreach ($result as $res) {
                 $groupId = $res['group_id'] ?? null;
                 $response = $res['response'] ?? null;
 
                 if (is_array($response) && isset($response['success']) && $response['success'] === 1) {
+                    $successGroupIds[] = $groupId;
                     continue;
                 }
 
@@ -98,6 +127,7 @@ class CreateVkRepostJob implements ShouldQueue
             Log::channel('job')->info('Репосты по офферу выполнены', [
                 'offer' => $offer->code,
                 'post_id' => $post->id,
+                'group_ids' => $successGroupIds
             ]);
 
             $taskDependencyResolver->release($this->taskId);

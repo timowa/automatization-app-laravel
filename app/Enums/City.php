@@ -31,4 +31,17 @@ enum City: int
             self::CHIKAGO => 'chernogorsk',
         };
     }
+
+    /**
+     * Города офферов, которые принимает группа с этим city.
+     *
+     * @return self[]
+     */
+    public function acceptedCities(): array
+    {
+        return match ($this) {
+            self::ABAKAN, self::CHIKAGO => [self::ABAKAN, self::CHIKAGO],
+            self::KYZYL => [self::KYZYL],
+        };
+    }
 }
