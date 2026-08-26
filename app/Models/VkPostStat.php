@@ -16,7 +16,7 @@ class VkPostStat extends Model
     const CREATED_AT = 'datetime';
     const UPDATED_AT = null;
 
-    protected $fillable = ['vk_post_id', 'views'];
+    protected $fillable = ['vk_post_id', 'views', 'reposts', 'likes', 'comments'];
 
     protected $casts = [
         'datetime' => 'datetime',

@@ -160,7 +160,6 @@ VKSCRIPT;
         if (empty($postIds)) {
             return [];
         }
-
         return $this->client->wall()->getById($this->token, [
             'posts' => implode(',', $postIds),
         ]);

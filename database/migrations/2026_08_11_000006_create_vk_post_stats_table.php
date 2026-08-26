@@ -12,7 +12,7 @@ return new class extends Migration
             $table->increments('id');
             $table->integer('vk_post_id')->notNullable();
             $table->integer('views')->notNullable();
-            $table->dateTime('datetime')->default(now());
+            $table->dateTime('datetime')->useCurrent();
         });
     }
 
