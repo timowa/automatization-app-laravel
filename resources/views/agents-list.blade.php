@@ -13,6 +13,7 @@
                     <th class="px-4 py-2 text-left">Телефон</th>
                     <th class="px-4 py-2 text-left">ФИО</th>
                     <th class="px-4 py-2 text-center">Токен</th>
+                    <th class="px-4 py-2 text-center">Активность</th>
                     <th class="px-4 py-2 text-left">VK ID</th>
                     <th class="px-4 py-2 text-left">Имя</th>
                     <th class="px-4 py-2 text-left">Фамилия</th>
@@ -48,6 +49,33 @@
                                 <span class="text-green-600" title="Токен активен">&#10003;</span>
                             @elseif ($hasVk && !$vkUser->is_token_available)
                                 <span class="text-yellow-600" title="Токен недоступен">&#33;</span>
+                            @endif
+                        </td>
+                        <td class="px-4 py-2">
+                            @php
+                                $agentStats = $stats[$agent->id] ?? null;
+                            @endphp
+                            @if ($agentStats)
+                                <div class="flex items-center gap-3">
+                                    <div class="flex flex-col items-center">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Просмотры"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                        <span class="text-xs font-semibold">{{ $agentStats->views }}</span>
+                                    </div>
+                                    <div class="flex flex-col items-center">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Репосты"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+                                        <span class="text-xs font-semibold">{{ $agentStats->reposts }}</span>
+                                    </div>
+                                    <div class="flex flex-col items-center">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Лайки"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+                                        <span class="text-xs font-semibold">{{ $agentStats->likes }}</span>
+                                    </div>
+                                    <div class="flex flex-col items-center">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" title="Комментарии"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                        <span class="text-xs font-semibold">{{ $agentStats->comments }}</span>
+                                    </div>
+                                </div>
+                            @else
+                                <span class="text-gray-400">—</span>
                             @endif
                         </td>
                         <td class="px-4 py-2">
