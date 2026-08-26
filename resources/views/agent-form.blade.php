@@ -39,6 +39,49 @@
             <button type="submit" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{{ $submitLabel }}</button>
         </form>
 
+        @if (!empty($statsByOffer))
+            <hr class="my-6">
+            <h3 class="text-lg font-bold mb-4">Статистика публикаций</h3>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-sm border">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-4 py-2 text-left border">Оффер / Сценарий</th>
+                            <th class="px-4 py-2 text-center border">Просмотры</th>
+                            <th class="px-4 py-2 text-center border">Репосты</th>
+                            <th class="px-4 py-2 text-center border">Лайки</th>
+                            <th class="px-4 py-2 text-center border">Комментарии</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($statsByOffer as $code => $offerData)
+                            <tr class="bg-gray-100 font-semibold">
+                                <td class="px-4 py-2 border">{{ $code }}</td>
+                                <td class="px-4 py-2 text-center border">{{ $offerData['total']['views'] }}</td>
+                                <td class="px-4 py-2 text-center border">{{ $offerData['total']['reposts'] }}</td>
+                                <td class="px-4 py-2 text-center border">{{ $offerData['total']['likes'] }}</td>
+                                <td class="px-4 py-2 text-center border">{{ $offerData['total']['comments'] }}</td>
+                            </tr>
+                            @foreach ($scenarioOrder as $scenarioValue)
+                                @php
+                                    $scenarioStats = $offerData['scenarios'][$scenarioValue] ?? null;
+                                @endphp
+                                @if ($scenarioStats)
+                                    <tr>
+                                        <td class="px-4 py-2 border pl-8">{{ \App\Enums\ScenarioType::from($scenarioValue)->label() }}</td>
+                                        <td class="px-4 py-2 text-center border">{{ $scenarioStats['views'] }}</td>
+                                        <td class="px-4 py-2 text-center border">{{ $scenarioStats['reposts'] }}</td>
+                                        <td class="px-4 py-2 text-center border">{{ $scenarioStats['likes'] }}</td>
+                                        <td class="px-4 py-2 text-center border">{{ $scenarioStats['comments'] }}</td>
+                                    </tr>
+                                @endif
+                            @endforeach
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+
         <a href="/agents" class="block text-center mt-4 text-gray-600 hover:underline">К списку агентов</a>
 
         @if (!$isCreate)
