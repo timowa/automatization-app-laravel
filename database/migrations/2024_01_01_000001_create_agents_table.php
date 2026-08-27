@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('agents', function (Blueprint $table) {
-            $table->increments('id');
+            $table->id();
             $table->string('name', 255)->notNullable();
             $table->string('phone', 20)->notNullable();
             $table->dateTime('updated_at')->nullable();

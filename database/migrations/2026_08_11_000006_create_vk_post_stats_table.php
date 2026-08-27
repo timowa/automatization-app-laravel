@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('vk_post_stats', function (Blueprint $table) {
-            $table->increments('id');
+            $table->id();
             $table->integer('vk_post_id')->notNullable();
             $table->integer('views')->notNullable();
             $table->dateTime('datetime')->useCurrent();

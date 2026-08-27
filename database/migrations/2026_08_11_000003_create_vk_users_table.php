@@ -9,7 +9,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('vk_users', function (Blueprint $table) {
-            $table->increments('id');
+            $table->id();
             $table->string('agent_id', 20)->notNullable();
             $table->string('vk_user_id', 255)->notNullable();
             $table->text('vk_token')->notNullable();

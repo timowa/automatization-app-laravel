@@ -137,8 +137,7 @@ class VkPostContext
 
     public function getImageCaption(): string
     {
-        return sprintf('г. %s, %s. Номер агента: %s',
-        $this->cityName,
+        return sprintf("%s.\nЗвоните: %s",
         $this->address,
         $this->getAgentPhone()
         );
