@@ -36,7 +36,6 @@ class Offer extends Model
         'city',
         'location',
         'agent_id',
-        'images',
         'deal',
         'category',
         'rooms',
@@ -48,7 +47,6 @@ class Offer extends Model
     ];
 
     protected $casts = [
-        'images' => 'array',
         'location' => 'array',
         'area' => 'float',
         'kitchen_area' => 'float',
@@ -86,6 +84,11 @@ class Offer extends Model
     public function agent(): BelongsTo
     {
         return $this->belongsTo(Agent::class, 'agent_id', 'id');
+    }
+
+    public function images(): HasMany
+    {
+        return $this->hasMany(OfferImage::class)->orderBy('sort_order');
     }
 
     public function vkWallPosts(): HasMany

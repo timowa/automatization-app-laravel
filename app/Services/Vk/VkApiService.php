@@ -41,43 +41,8 @@ class VkApiService
      * @throws VKApiException
      * @throws VKApiWallDonutException
      */
-    public function wallPost(int $ownerId, string $message, array $images = [], string $imageCaption = ''): array
+    public function wallPost(int $ownerId, string $message, array $attachments = []): array
     {
-        $attachments = [];
-        $files = [];
-
-        if (!empty($images)) {
-            $images = array_slice($images, 0, 10);
-            $address = $this->client->photos()->getWallUploadServer($this->token);
-
-            foreach ($images as $image) {
-                try {
-                    $filename = downloadFile($image, storage_path('app/tmp'));
-                    $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
-                    $files[] = $filename;
-
-                    $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
-                    $saveResponse = $this->client->photos()->saveWallPhoto($this->token, [
-                        'server' => $photo['server'],
-                        'photo' => $photo['photo'],
-                        'hash' => $photo['hash'],
-                        'user_id' => $ownerId,
-                        'caption' => $imageCaption
-                    ])[0];
-
-                    $attachments[] = 'photo' . $saveResponse['owner_id'] . '_' . $saveResponse['id'];
-                } catch (\Throwable $th) {
-                    Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте' . $th->getMessage(), [
-                        'image_original_url' => $image,
-                        'image_local_name' => $filename ?? null,
-                        'vk_response_upload' => $photo ?? null,
-                        'vk_response_save' => $saveResponse ?? null
-                    ]);
-                    continue;
-                }
-            }
-        }
-
         $result = $this->client->wall()->post($this->token, [
             'owner_id' => $ownerId,
             'message' => $message,
@@ -86,11 +51,45 @@ class VkApiService
             'primary_attachments_mode' => 'grid'
         ]);
 
-        foreach ($files as $file) {
-            unlink($file);
-        }
-
         return $result;
+    }
+
+    /**
+     * Загружает изображение на сервер ВК для поста на стене.
+     *
+     * @return int|null media_id (id фото на сервере ВК) или null при ошибке
+     */
+    public function uploadWallPhoto(string $imageUrl, int $ownerId, string $caption = ''): ?int
+    {
+        $filename = null;
+
+        try {
+            $filename = downloadFile($imageUrl, storage_path('app/tmp'));
+            $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
+
+            $address = $this->client->photos()->getWallUploadServer($this->token);
+            $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
+            $saveResponse = $this->client->photos()->saveWallPhoto($this->token, [
+                'server' => $photo['server'],
+                'photo' => $photo['photo'],
+                'hash' => $photo['hash'],
+                'user_id' => $ownerId,
+                'caption' => $caption
+            ])[0];
+
+            return (int) $saveResponse['id'];
+        } catch (\Throwable $th) {
+            Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте: ' . $th->getMessage(), [
+                'image_original_url' => $imageUrl,
+                'image_local_name' => $filename,
+            ]);
+
+            return null;
+        } finally {
+            if ($filename !== null && is_file($filename)) {
+                @unlink($filename);
+            }
+        }
     }
 
     public function storiesPost(string $postId, string $imagePath): array
@@ -216,6 +215,19 @@ VKSCRIPT;
             'owner_id' => $ownerId,
             'post_id' => $postId,
             'message' => $message,
+        ]);
+    }
+
+    /**
+     * @throws VKClientException
+     * @throws VKApiException
+     */
+    public function likePost(int $ownerId, int $postId): array
+    {
+        return $this->client->likes()->add($this->token, [
+            'type' => 'post',
+            'owner_id' => $ownerId,
+            'item_id' => $postId,
         ]);
     }
 

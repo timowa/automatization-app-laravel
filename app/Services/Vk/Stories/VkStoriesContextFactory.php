@@ -21,7 +21,7 @@ class VkStoriesContextFactory
             deposit: $offer->deposit,
             address: $offer->getAddressFromLocation(),
             rooms: (int) $offer->rooms,
-            image: $offer->images[0] ?? '',
+            image: $offer->images->first()?->original_url ?? '',
             deal: $offer->deal() ?? \App\Enums\Deal::SALE,
             category: $offer->category() ?? \App\Enums\Category::APARTMENT,
             postId: $post->getFullId(),

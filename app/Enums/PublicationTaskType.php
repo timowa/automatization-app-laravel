@@ -4,7 +4,9 @@ namespace App\Enums;
 
 enum PublicationTaskType: string
 {
+    case VK_UPLOAD_IMAGES = 'vk_upload_images';
     case VK_POST = 'vk_post';
+    case VK_LIKE = 'vk_like';
     case VK_COMMENT = 'vk_comment';
     case VK_STORY = 'vk_story';
     case VK_LOOP_STORY = 'vk_loop_story';

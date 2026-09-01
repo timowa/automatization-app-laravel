@@ -9,9 +9,11 @@ use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
 use App\Models\Agent;
 use App\Models\Offer;
+use App\Models\OfferImage;
 use App\Models\Publication;
 use App\Models\PublicationTask;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -84,8 +86,13 @@ class WebhookScenarioTest extends TestCase
 
         $this->assertDatabaseHas('publication_tasks', [
             'publication_id' => $publication->id,
-            'type' => PublicationTaskType::VK_POST->value,
+            'type' => PublicationTaskType::VK_UPLOAD_IMAGES->value,
             'status' => PublicationTaskStatus::PENDING->value,
+        ]);
+        $this->assertDatabaseHas('publication_tasks', [
+            'publication_id' => $publication->id,
+            'type' => PublicationTaskType::VK_POST->value,
+            'status' => PublicationTaskStatus::WAITING->value,
         ]);
     }
 
@@ -106,6 +113,7 @@ class WebhookScenarioTest extends TestCase
             ->pluck('type')
             ->toArray();
 
+        $this->assertContains(PublicationTaskType::VK_UPLOAD_IMAGES->value, $types);
         $this->assertContains(PublicationTaskType::VK_POST->value, $types);
         $this->assertContains(PublicationTaskType::VK_LOOP_STORY->value, $types);
         $this->assertContains(PublicationTaskType::VK_CREATE_PRODUCT->value, $types);
@@ -133,6 +141,7 @@ class WebhookScenarioTest extends TestCase
             ->pluck('type')
             ->toArray();
 
+        $this->assertContains(PublicationTaskType::VK_UPLOAD_IMAGES->value, $types);
         $this->assertContains(PublicationTaskType::VK_POST->value, $types);
         $this->assertContains(PublicationTaskType::VK_LOOP_STORY->value, $types);
         $this->assertContains(PublicationTaskType::VK_CREATE_PRODUCT->value, $types);
@@ -350,5 +359,118 @@ class WebhookScenarioTest extends TestCase
 
         $response->assertOk();
         $this->assertDatabaseCount('offers', 0);
+    }
+
+    public function test_media_id_copied_from_previous_offer_with_same_url_and_agent(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 1_000_000,
+        ]);
+        $url = 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/dfe758a04f96e498c650e184f376ebf0.jpg';
+        OfferImage::factory()->for($prevOffer)->withMediaId(123456)->create([
+            'original_url' => $url,
+            'sort_order' => 0,
+        ]);
+
+        $this->postJson('/offer', $this->payload(['price' => 900_000]));
+
+        $newOffer = Offer::latest('id')->first();
+        $this->assertNotNull($newOffer);
+        $newImage = $newOffer->images->firstWhere('original_url', $url);
+        $this->assertNotNull($newImage);
+        $this->assertSame(123456, $newImage->media_id);
+    }
+
+    public function test_media_id_null_for_new_url(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 1_000_000,
+        ]);
+        OfferImage::factory()->for($prevOffer)->withMediaId(123456)->create([
+            'original_url' => 'https://example.com/old-photo.jpg',
+            'sort_order' => 0,
+        ]);
+
+        $response = $this->postJson('/offer', $this->payload(['price' => 900_000]));
+
+        $this->assertSame(200, $response->status(), 'Response: ' . $response->getContent());
+        $this->assertDatabaseCount('offers', 2);
+
+        $newOffer = Offer::latest('id')->first();
+        $this->assertNotNull($newOffer);
+        $this->assertNotSame($prevOffer->id, $newOffer->id);
+        $newImage = $newOffer->images->first();
+        $this->assertNotNull($newImage);
+        $this->assertNull($newImage->media_id);
+    }
+
+    public function test_media_id_not_copied_when_agent_changed(): void
+    {
+        $firstAgent = Agent::factory()->create(['phone' => '79953742476']);
+        $secondAgent = Agent::factory()->create(['phone' => '79999999999']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $firstAgent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 1_000_000,
+        ]);
+        $url = 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/dfe758a04f96e498c650e184f376ebf0.jpg';
+        OfferImage::factory()->for($prevOffer)->withMediaId(123456)->create([
+            'original_url' => $url,
+            'sort_order' => 0,
+        ]);
+
+        $this->postJson('/offer', $this->payload([
+            'price' => 900_000,
+            'agent' => ['name' => 'Second Agent', 'phone' => '+79999999999'],
+        ]));
+
+        $newOffer = Offer::latest('id')->first();
+        $this->assertNotNull($newOffer);
+        $this->assertSame($secondAgent->id, $newOffer->agent_id);
+        $newImage = $newOffer->images->firstWhere('original_url', $url);
+        $this->assertNotNull($newImage);
+        $this->assertNull($newImage->media_id);
+    }
+
+    public function test_no_media_id_query_when_image_urls_empty(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $prevOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '217-100',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 1_000_000,
+        ]);
+        $url = 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/dfe758a04f96e498c650e184f376ebf0.jpg';
+        OfferImage::factory()->for($prevOffer)->withMediaId(123456)->create([
+            'original_url' => $url,
+            'sort_order' => 0,
+        ]);
+
+        DB::enableQueryLog();
+
+        $this->postJson('/offer', $this->payload([
+            'price' => 900_000,
+            'photos' => [],
+        ]));
+
+        $queries = DB::getQueryLog();
+        DB::disableQueryLog();
+
+        $newOffer = Offer::latest('id')->first();
+        $this->assertNotNull($newOffer);
+        $this->assertDatabaseCount('offer_images', 1);
+
+        $whereInQueries = array_filter($queries, fn (array $q): bool => str_contains($q['query'], '`original_url` in'));
+        $this->assertEmpty($whereInQueries, 'Query for existing media_id should not be executed when imageUrls is empty');
     }
 }

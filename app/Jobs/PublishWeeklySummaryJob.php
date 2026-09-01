@@ -62,15 +62,15 @@ class PublishWeeklySummaryJob implements ShouldQueue
         $completedSold = $this->countClosedByDeal($agent->id, Deal::SALE);
         $completedRented = $this->countClosedByDeal($agent->id, Deal::RENT_OUT);
 
-        $images = [];
+        $imageUrls = [];
         foreach ($activeOffers as $offer) {
-            if (count($images) >= 10) {
+            if (count($imageUrls) >= 10) {
                 break;
             }
 
-            $offerImages = $offer->images ?? [];
-            if (! empty($offerImages)) {
-                $images[] = $offerImages[0];
+            $firstImage = $offer->images->first();
+            if ($firstImage) {
+                $imageUrls[] = $firstImage->original_url;
             }
         }
 
@@ -89,7 +89,16 @@ class PublishWeeklySummaryJob implements ShouldQueue
 
         try {
             $vkApi->setToken($vkUser->getToken());
-            $result = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $images);
+
+            $attachments = [];
+            foreach ($imageUrls as $url) {
+                $mediaId = $vkApi->uploadWallPhoto($url, (int) $vkUser->vk_user_id);
+                if ($mediaId !== null) {
+                    $attachments[] = 'photo' . (int) $vkUser->vk_user_id . '_' . $mediaId;
+                }
+            }
+
+            $result = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $attachments);
 
             Log::channel('job')->info('Еженедельная сводка опубликована', [
                 'agent_id' => $agent->id,

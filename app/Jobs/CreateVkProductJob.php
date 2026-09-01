@@ -126,7 +126,8 @@ class CreateVkProductJob implements ShouldQueue
             }
 
             foreach ($groupIds as $groupId) {
-                $photoIds = $vkApi->uploadMarketPhoto((int)$groupId, $context->images);
+                $imageUrls = $offer->images->pluck('original_url')->toArray();
+                $photoIds = $vkApi->uploadMarketPhoto((int)$groupId, $imageUrls);
                 try {
                     $results = $vkApi->createProductsBatch(
                         (int)$groupId,

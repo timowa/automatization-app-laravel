@@ -12,12 +12,12 @@ use PHPUnit\Framework\TestCase;
 
 class BackendImplementationTest extends TestCase
 {
-    public function test_scenario_factory_returns_eleven_scenarios_in_order(): void
+    public function test_scenario_factory_returns_twelve_scenarios_in_order(): void
     {
         $factory = new ScenarioFactory;
         $list = $factory->list();
 
-        $this->assertCount(11, $list);
+        $this->assertCount(12, $list);
 
         $expected = [
             ScenarioType::ANNOUNCEMENT->value,
@@ -27,6 +27,7 @@ class BackendImplementationTest extends TestCase
             ScenarioType::AGENT_CHANGED->value,
             ScenarioType::BOOKING->value,
             ScenarioType::SOLD->value,
+            ScenarioType::RENT_OUT->value,
             ScenarioType::FEEDBACK->value,
             ScenarioType::WITHDRAWN->value,
             ScenarioType::DELAYED->value,
@@ -54,13 +55,16 @@ class BackendImplementationTest extends TestCase
     {
         $inspector = new PublicationTaskDependenceInspector;
 
-        $this->assertNull($inspector->inspect(PublicationTaskType::VK_POST));
+        $this->assertNull($inspector->inspect(PublicationTaskType::VK_UPLOAD_IMAGES));
         $this->assertNull($inspector->inspect(PublicationTaskType::VK_END_LOOP_STORY));
+
+        $this->assertSame(PublicationTaskType::VK_UPLOAD_IMAGES, $inspector->inspect(PublicationTaskType::VK_POST));
 
         $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_STORY));
         $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_LOOP_STORY));
         $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_COMMENT));
         $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_REPOST));
+        $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_LIKE));
         $this->assertSame(PublicationTaskType::VK_POST, $inspector->inspect(PublicationTaskType::VK_CREATE_PRODUCT));
 
         $this->assertSame(PublicationTaskType::VK_CREATE_PRODUCT, $inspector->inspect(PublicationTaskType::VK_EDIT_PRODUCT));

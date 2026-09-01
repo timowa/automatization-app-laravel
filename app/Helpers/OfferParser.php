@@ -34,11 +34,11 @@ final class OfferParser
             throw new OfferParserException('Не найден агент по номеру телефона');
         }
 
-        $images = [];
+        $imageUrls = [];
         foreach ($data['photos'] ?? [] as $photo) {
             $image = $photo['url'] ?? '';
             if ($image !== '') {
-                $images[] = $image;
+                $imageUrls[] = $image;
             }
         }
 
@@ -64,7 +64,7 @@ final class OfferParser
             isset($data['roomsOffered']) ? (int) $data['roomsOffered'] : null,
             isset($data['floor']) ? (int) $data['floor'] : null,
             isset($data['floors']) ? (int) $data['floors'] : null,
-            $images,
+            $imageUrls,
             $deal,
             $category,
             $data['location'] ?? null,

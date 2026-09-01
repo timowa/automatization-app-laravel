@@ -28,7 +28,6 @@ class VkPostContextTest extends TestCase
             agentName: $params['agentName'] ?? 'Агент',
             agentPhone: $params['agentPhone'] ?? '+79999999999',
             cityName: $params['cityName'] ?? 'Кызыл',
-            images: $params['images'] ?? [],
             offerId: $params['offerId'] ?? 1,
             deal: $params['deal'] ?? Deal::SALE,
             category: $params['category'] ?? Category::APARTMENT,

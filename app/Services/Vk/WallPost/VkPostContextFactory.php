@@ -34,7 +34,6 @@ class VkPostContextFactory
             agentName: $agent->name,
             agentPhone: $agent->phone,
             cityName: $city?->label() ?? '',
-            images: $offer->images ?? [],
             offerId: (int) $offer->offer_id,
             deal: $offer->deal() ?? \App\Enums\Deal::SALE,
             category: $offer->category() ?? \App\Enums\Category::APARTMENT,

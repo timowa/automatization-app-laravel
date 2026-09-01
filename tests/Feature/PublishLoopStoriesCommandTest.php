@@ -28,7 +28,10 @@ class PublishLoopStoriesCommandTest extends TestCase
             'is_active' => true,
             'last_published_at' => Carbon::now()->subDay(),
         ]);
-        $offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $offer->id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
 
         $staleOffer = Offer::factory()->create();
         $stale = VkLoopStory::factory()->create([
@@ -38,7 +41,10 @@ class PublishLoopStoriesCommandTest extends TestCase
         ]);
         VkUser::factory()->create(['agent_id' => $staleOffer->agent_id]);
         VkWallPost::factory()->forOffer($staleOffer->id)->create();
-        $staleOffer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $staleOffer->id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
 
         $inactive = VkLoopStory::factory()->inactive()->create();
 

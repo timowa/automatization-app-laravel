@@ -7,6 +7,7 @@ use App\Exceptions\OfferParserException;
 use App\Helpers\OfferChangesDetector;
 use App\Helpers\OfferParser;
 use App\Models\Offer;
+use App\Models\OfferImage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -53,7 +54,31 @@ class ReceiveOfferWebhookAction
                 ->latest('id')
                 ->first();
 
-            $offer = Offer::create($offerData->getArray());
+            $offer = DB::transaction(function () use ($offerData): Offer {
+                $offer = Offer::create($offerData->getArray());
+
+                $existingMediaIds = $offerData->imageUrls !== []
+                    ? OfferImage::whereIn('original_url', $offerData->imageUrls)
+                        ->whereRelation('offer', function ($q) use ($offer): void {
+                            $q->where('code', $offer->code)
+                              ->where('agent_id', $offer->agent_id);
+                        })
+                        ->whereNotNull('media_id')
+                        ->get()
+                        ->keyBy('original_url')
+                    : collect();
+
+                foreach ($offerData->imageUrls as $index => $url) {
+                    OfferImage::create([
+                        'offer_id' => $offer->id,
+                        'original_url' => $url,
+                        'media_id' => $existingMediaIds->get($url)?->media_id,
+                        'sort_order' => $index,
+                    ]);
+                }
+
+                return $offer;
+            });
             Log::channel('job')->info('Offer created', ['code' => $offerData->code, 'id' => $offer->id]);
 
             event(new OfferCreatedEvent($prevOffer?->id, $offer->id));

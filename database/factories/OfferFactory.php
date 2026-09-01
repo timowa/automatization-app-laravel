@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Offer;
+use App\Models\OfferImage;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -32,7 +33,6 @@ class OfferFactory extends Factory
             'floors_total' => 5,
             'commission' => null,
             'deposit' => null,
-            'images' => ['https://example.com/photo1.jpg'],
             'deal' => 1,
             'category' => 1,
         ];
@@ -66,5 +66,15 @@ class OfferFactory extends Factory
     public function withPrice(int $price): static
     {
         return $this->state(fn () => ['price' => $price]);
+    }
+
+    public function withImages(int $count = 1): static
+    {
+        return $this->afterCreating(function (Offer $offer) use ($count): void {
+            OfferImage::factory()
+                ->count($count)
+                ->sequence(fn (int $sequence) => ['sort_order' => $sequence])
+                ->create(['offer_id' => $offer->id]);
+        });
     }
 }

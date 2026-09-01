@@ -108,14 +108,16 @@ class PublishWeeklySummaryCommandTest extends TestCase
     {
         $offer = Offer::factory()->create();
         $vkUser = VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        \App\Models\OfferImage::factory()->create(['offer_id' => $offer->id]);
 
         $job = new PublishWeeklySummaryJob($offer->agent_id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
-        $this->assertSame('wallPost', $this->vkApi->calls[0]['method']);
-        $this->assertSame((int) $vkUser->vk_user_id, $this->vkApi->calls[0]['owner_id']);
-        $this->assertSame('Сгенерированный текст поста', $this->vkApi->calls[0]['message']);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
+        $this->assertSame('wallPost', $wallPostCalls[array_key_first($wallPostCalls)]['method']);
+        $this->assertSame((int) $vkUser->vk_user_id, $wallPostCalls[array_key_first($wallPostCalls)]['owner_id']);
+        $this->assertSame('Сгенерированный текст поста', $wallPostCalls[array_key_first($wallPostCalls)]['message']);
     }
 
     public function test_job_limits_images_to_ten(): void
@@ -124,17 +126,21 @@ class PublishWeeklySummaryCommandTest extends TestCase
         VkUser::factory()->create(['agent_id' => $agent->id]);
 
         for ($i = 0; $i < 12; $i++) {
-            Offer::factory()->create([
+            $offer = Offer::factory()->create([
                 'agent_id' => $agent->id,
-                'images' => ["https://example.com/photo{$i}.jpg"],
                 'status' => OfferStatus::ACTIVE->value,
+            ]);
+            \App\Models\OfferImage::factory()->create([
+                'offer_id' => $offer->id,
+                'original_url' => "https://example.com/photo{$i}.jpg",
             ]);
         }
 
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
     }
 
     public function test_job_counts_sold_and_rented_separately(): void
@@ -142,10 +148,13 @@ class PublishWeeklySummaryCommandTest extends TestCase
         $agent = Agent::factory()->create();
         VkUser::factory()->create(['agent_id' => $agent->id]);
 
-        Offer::factory()->create([
+        $activeOffer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
-            'images' => ['https://example.com/active.jpg'],
+        ]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $activeOffer->id,
+            'original_url' => 'https://example.com/active.jpg',
         ]);
 
         $soldCode = '100-200';
@@ -169,7 +178,8 @@ class PublishWeeklySummaryCommandTest extends TestCase
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertSame('wallPost', $this->vkApi->calls[0]['method']);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
     }
 
     public function test_job_counts_active_sale_and_rent_separately(): void
@@ -177,24 +187,31 @@ class PublishWeeklySummaryCommandTest extends TestCase
         $agent = Agent::factory()->create();
         VkUser::factory()->create(['agent_id' => $agent->id]);
 
-        Offer::factory()->create([
+        $saleOffer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
             'deal' => Deal::SALE->value,
-            'images' => ['https://example.com/active.jpg'],
+        ]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $saleOffer->id,
+            'original_url' => 'https://example.com/active.jpg',
         ]);
 
-        Offer::factory()->create([
+        $rentOffer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
             'deal' => Deal::RENT_OUT->value,
-            'images' => ['https://example.com/rent.jpg'],
+        ]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $rentOffer->id,
+            'original_url' => 'https://example.com/rent.jpg',
         ]);
 
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
         $this->llmGenerator
             ->shouldHaveReceived('generate')
             ->with(
@@ -212,27 +229,29 @@ class PublishWeeklySummaryCommandTest extends TestCase
     {
         $agent = Agent::factory()->create();
         VkUser::factory()->create(['agent_id' => $agent->id]);
-        Offer::factory()->create([
+        $offer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
-            'images' => [],
         ]);
 
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
-        $this->assertSame('wallPost', $this->vkApi->calls[0]['method']);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
     }
 
     public function test_job_continues_on_vk_api_error(): void
     {
         $agent = Agent::factory()->create();
         VkUser::factory()->create(['agent_id' => $agent->id]);
-        Offer::factory()->create([
+        $offer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
-            'images' => ['https://example.com/photo.jpg'],
+        ]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $offer->id,
+            'original_url' => 'https://example.com/photo.jpg',
         ]);
 
         $this->vkApi->setFailNext('VKApiException', 'VK blocked');
@@ -240,17 +259,20 @@ class PublishWeeklySummaryCommandTest extends TestCase
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
+        $this->assertGreaterThan(0, count($this->vkApi->calls));
     }
 
     public function test_job_does_not_publish_when_llm_fails(): void
     {
         $agent = Agent::factory()->create();
         VkUser::factory()->create(['agent_id' => $agent->id]);
-        Offer::factory()->create([
+        $offer = Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
-            'images' => ['https://example.com/photo.jpg'],
+        ]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $offer->id,
+            'original_url' => 'https://example.com/photo.jpg',
         ]);
 
         $failingLlmGenerator = Mockery::mock(WeeklySummaryLlmGenerator::class);
@@ -261,7 +283,8 @@ class PublishWeeklySummaryCommandTest extends TestCase
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $failingLlmGenerator);
 
-        $this->assertCount(0, $this->vkApi->calls);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(0, $wallPostCalls);
     }
 
     public function test_job_publishes_text_only_when_no_images(): void
@@ -271,14 +294,13 @@ class PublishWeeklySummaryCommandTest extends TestCase
         Offer::factory()->create([
             'agent_id' => $agent->id,
             'status' => OfferStatus::ACTIVE->value,
-            'images' => [],
         ]);
 
         $job = new PublishWeeklySummaryJob($agent->id);
         $job->handle($this->vkApi, $this->llmGenerator);
 
-        $this->assertCount(1, $this->vkApi->calls);
-        $this->assertSame('wallPost', $this->vkApi->calls[0]['method']);
+        $wallPostCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'wallPost');
+        $this->assertCount(1, $wallPostCalls);
     }
 
     public function test_job_logs_and_returns_when_token_revoked_between_dispatch_and_handle(): void

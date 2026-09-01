@@ -24,7 +24,6 @@ class VkPostContext
         public string $agentName,
         public string $agentPhone,
         public string $cityName,
-        public array $images,
         public int $offerId,
         public Deal $deal,
         public Category $category,

@@ -9,6 +9,7 @@ use App\Enums\PublicationTaskStatus;
 use App\Enums\PublicationTaskType;
 use App\Jobs\ArchiveVkProductJob;
 use App\Jobs\CreateVkCommentJob;
+use App\Jobs\CreateVkLikeJob;
 use App\Jobs\CreateVkLoopStoryJob;
 use App\Jobs\CreateVkPostJob;
 use App\Jobs\CreateVkProductJob;
@@ -16,7 +17,9 @@ use App\Jobs\CreateVkRepostJob;
 use App\Jobs\CreateVkStoriesJob;
 use App\Jobs\EditVkProductJob;
 use App\Jobs\EndVkLoopStoryJob;
+use App\Jobs\UploadVkImagesJob;
 use App\Models\Offer;
+use App\Models\OfferImage;
 use App\Models\Publication;
 use App\Models\PublicationTask;
 use App\Models\VkGroup;
@@ -282,7 +285,10 @@ class VkJobsTest extends TestCase
     public function test_create_vk_stories_job_success(): void
     {
         $postTask = $this->createPostTask();
-        $postTask->publication->offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -325,10 +331,89 @@ class VkJobsTest extends TestCase
         $this->assertNotNull($commentTask->external_id);
     }
 
+    public function test_create_vk_like_job_success(): void
+    {
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $likeTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_LIKE)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new CreateVkLikeJob($likeTask->id);
+
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $likeTask = $likeTask->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $likeTask->status);
+    }
+
+    public function test_create_vk_like_job_fails_when_no_token(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id, 'vk_token' => '']);
+        $publication = Publication::factory()->forOffer($offer)->create();
+
+        $postTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_POST)
+            ->withStatus(PublicationTaskStatus::SUCCESS)
+            ->create();
+
+        $post = VkWallPost::factory()->forOffer($offer->id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id]);
+
+        $likeTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_LIKE)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new CreateVkLikeJob($likeTask->id);
+
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $likeTask = $likeTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $likeTask->status);
+        $this->assertStringContainsString('токен', $likeTask->error ?? '');
+    }
+
+    public function test_create_vk_like_job_sets_failed_on_vk_api_exception(): void
+    {
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $likeTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_LIKE)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->setFailNext('VKApiException', 'VK like error');
+
+        $job = new CreateVkLikeJob($likeTask->id);
+
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $likeTask = $likeTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $likeTask->status);
+        $this->assertSame('VK like error', $likeTask->error);
+    }
+
     public function test_create_vk_loop_story_job_creates_loop_story_record(): void
     {
         $postTask = $this->createPostTask();
-        $postTask->publication->offer->update(['images' => [base_path('storage/app/assets/images/vkstory.png')]]);
+        \App\Models\OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -672,5 +757,104 @@ class VkJobsTest extends TestCase
         $productTask = $productTask->fresh();
         $this->assertSame(PublicationTaskStatus::FAILED, $productTask->status);
         $this->assertDatabaseCount('vk_products', 0);
+    }
+
+    private function createUploadImagesTask(): PublicationTask
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        $publication = Publication::factory()->forOffer($offer)->create();
+
+        return PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_UPLOAD_IMAGES)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+    }
+
+    public function test_upload_vk_images_job_success(): void
+    {
+        $task = $this->createUploadImagesTask();
+        $offer = $task->publication->offer;
+
+        OfferImage::factory()->count(3)->sequence(
+            ['sort_order' => 0],
+            ['sort_order' => 1],
+            ['sort_order' => 2],
+        )->create(['offer_id' => $offer->id, 'media_id' => null]);
+
+        $job = new UploadVkImagesJob($task->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $task->status);
+
+        $uploadCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'uploadWallPhoto');
+        $this->assertCount(3, $uploadCalls);
+
+        foreach ($offer->fresh()->images as $image) {
+            $this->assertNotNull($image->media_id);
+        }
+    }
+
+    public function test_upload_vk_images_job_no_op_when_all_uploaded(): void
+    {
+        $task = $this->createUploadImagesTask();
+        $offer = $task->publication->offer;
+
+        OfferImage::factory()->count(2)->sequence(
+            ['sort_order' => 0, 'media_id' => 100],
+            ['sort_order' => 1, 'media_id' => 101],
+        )->create(['offer_id' => $offer->id]);
+
+        $job = new UploadVkImagesJob($task->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $task->status);
+
+        $uploadCalls = array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'uploadWallPhoto');
+        $this->assertCount(0, $uploadCalls);
+    }
+
+    public function test_upload_vk_images_job_fails_after_max_retries(): void
+    {
+        $task = $this->createUploadImagesTask();
+        $offer = $task->publication->offer;
+
+        OfferImage::factory()->count(2)->sequence(
+            ['sort_order' => 0],
+            ['sort_order' => 1],
+        )->create(['offer_id' => $offer->id, 'media_id' => null]);
+
+        $this->vkApi->failNext = true;
+        $this->vkApi->failWith = 'RuntimeException';
+        $this->vkApi->failMessage = 'Upload failed';
+
+        $job = new UploadVkImagesJob($task->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
+        $this->assertNotNull($task->error);
+    }
+
+    public function test_upload_vk_images_job_fails_when_no_token(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id, 'vk_token' => '']);
+        $publication = Publication::factory()->forOffer($offer)->create();
+        $task = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_UPLOAD_IMAGES)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new UploadVkImagesJob($task->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
+        $this->assertStringContainsString('токен', $task->error ?? '');
     }
 }

@@ -53,12 +53,20 @@ class FakeVkApiService extends VkApiService
         throw new \RuntimeException($this->failMessage);
     }
 
-    public function wallPost(int $ownerId, string $message, array $images = [], string $imageCaption = ''): array
+    public function wallPost(int $ownerId, string $message, array $attachments = []): array
     {
-        $this->calls[] = ['method' => 'wallPost', 'owner_id' => $ownerId, 'message' => $message];
+        $this->calls[] = ['method' => 'wallPost', 'owner_id' => $ownerId, 'message' => $message, 'attachments' => $attachments];
         $this->maybeFail('wallPost');
 
         return ['post_id' => fake()->unique()->numberBetween(1, 1_000_000)];
+    }
+
+    public function uploadWallPhoto(string $imageUrl, int $ownerId, string $caption = ''): ?int
+    {
+        $this->calls[] = ['method' => 'uploadWallPhoto', 'owner_id' => $ownerId];
+        $this->maybeFail('uploadWallPhoto');
+
+        return fake()->unique()->numberBetween(1, 1_000_000);
     }
 
     public function storiesPost(string $postId, string $imagePath): array
@@ -86,6 +94,14 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('createComment');
 
         return ['comment_id' => fake()->unique()->numberBetween(1, 1_000_000)];
+    }
+
+    public function likePost(int $ownerId, int $postId): array
+    {
+        $this->calls[] = ['method' => 'likePost', 'owner_id' => $ownerId, 'post_id' => $postId];
+        $this->maybeFail('likePost');
+
+        return ['likes' => fake()->numberBetween(1, 100)];
     }
 
     public function getGroupsWithMarketForUser(int $userId): array

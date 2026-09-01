@@ -27,7 +27,9 @@ class AnnouncementScenario extends Scenario
     public function tasks(): array
     {
         return [
+            PublicationTaskType::VK_UPLOAD_IMAGES,
             PublicationTaskType::VK_POST,
+            PublicationTaskType::VK_LIKE,
             PublicationTaskType::VK_STORY,
             PublicationTaskType::VK_REPOST
         ];
