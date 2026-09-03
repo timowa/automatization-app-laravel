@@ -14,6 +14,15 @@ class UpdateAgentRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->has('phone')) {
+            $this->merge([
+                'phone' => preg_replace('/[^0-9]/', '', $this->input('phone')),
+            ]);
+        }
+    }
+
     public function rules(): array
     {
         $agentId = $this->route('id');

@@ -43,6 +43,12 @@
                     .then(r => r.json())
                     .then(data => {
                         let messages = data.messages || [];
+                        if (!messages.length && data.errors) {
+                            messages = Object.values(data.errors).flat();
+                        }
+                        if (!messages.length && data.message) {
+                            messages = [data.message];
+                        }
                         if (messages.length) {
                             alert(messages.join('\n'));
                         }

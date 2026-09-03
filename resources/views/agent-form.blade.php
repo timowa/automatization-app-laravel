@@ -94,3 +94,41 @@
         @endif
     </div>
 @endsection
+
+@push('scripts')
+    <script>
+        (function () {
+            const PREFIX = '+7 ';
+
+            function formatPhone(value) {
+                let digits = value.replace(/\D/g, '');
+                if (digits.length && digits[0] === '8') {
+                    digits = '7' + digits.slice(1);
+                }
+                if (digits.length && digits[0] !== '7') {
+                    digits = '7' + digits;
+                }
+                digits = digits.slice(0, 11);
+
+                let result = PREFIX;
+                const rest = digits.slice(1);
+                if (rest.length > 0) result += rest.slice(0, 3);
+                if (rest.length > 3) result += ' ' + rest.slice(3, 6);
+                if (rest.length > 6) result += '-' + rest.slice(6, 8);
+                if (rest.length > 8) result += '-' + rest.slice(8, 10);
+
+                return result;
+            }
+
+            document.querySelectorAll('input[name="phone"]').forEach(function (input) {
+                input.value = formatPhone(input.value);
+                input.addEventListener('input', function () {
+                    const formatted = formatPhone(input.value);
+                    if (input.value !== formatted) {
+                        input.value = formatted;
+                    }
+                });
+            });
+        })();
+    </script>
+@endpush
