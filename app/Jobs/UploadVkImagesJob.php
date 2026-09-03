@@ -64,11 +64,7 @@ class UploadVkImagesJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent->vkUser;
 
-            if (!$agent || !$vkUser) {
-                throw new NotFoundException('Не найдены данные агента');
-            }
-
-            if ($vkUser->getToken() === '') {
+            if (!$agent || !$vkUser || !$vkUser->isTokenValid()) {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -175,6 +171,9 @@ class UploadVkImagesJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка загрузки изображений оффера', ['task_id' => $this->taskId]);
             Log::channel('vk')->warning($e->getMessage());
         } catch (VKApiException $e) {
+            if ($e->getErrorCode() === 5 && isset($vkUser)) {
+                $vkUser->update(['is_token_valid' => false]);
+            }
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,

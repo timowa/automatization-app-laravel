@@ -45,10 +45,10 @@
                         </td>
                         <td class="px-4 py-2">{{ $agent->name }}</td>
                         <td class="px-4 py-2 text-center">
-                            @if ($hasVk && $vkUser->is_token_available)
+                            @if ($hasVk && $vkUser->is_token_valid)
                                 <span class="text-green-600" title="Токен активен">&#10003;</span>
-                            @elseif ($hasVk && !$vkUser->is_token_available)
-                                <span class="text-yellow-600" title="Токен недоступен">&#33;</span>
+                            @elseif ($hasVk && !$vkUser->is_token_valid)
+                                <span class="text-red-600" title="Токен невалиден">&#10007;</span>
                             @endif
                         </td>
                         <td class="px-4 py-2">

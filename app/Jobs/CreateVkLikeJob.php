@@ -67,7 +67,7 @@ class CreateVkLikeJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
-            if (!$vkUser || $vkUser->getToken() === '') {
+            if (!$vkUser || !$vkUser->isTokenValid()) {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -88,6 +88,9 @@ class CreateVkLikeJob implements ShouldQueue
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка лайка поста по офферу', ['task_id' => $this->taskId]);
         } catch (VkApiException $e) {
+            if ($e->getErrorCode() === 5 && isset($vkUser)) {
+                $vkUser->update(['is_token_valid' => false]);
+            }
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,

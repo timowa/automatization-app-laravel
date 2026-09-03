@@ -63,7 +63,7 @@ class GetStatsCommand extends Command
             $agentId = $ownerIdToAgentId[(int) $ownerId] ?? null;
             $vkUser = $agentId !== null ? $vkUsers->get($agentId) : null;
 
-            if ($vkUser === null || $vkUser->getToken() === '' || !$vkUser->is_token_available) {
+            if ($vkUser === null || !$vkUser->isTokenValid()) {
                 $logger->warning('Пропуск агента: нет токена или токен недоступен', [
                     'vk_user_id' => $ownerId,
                 ]);

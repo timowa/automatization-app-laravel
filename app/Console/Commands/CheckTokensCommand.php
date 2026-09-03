@@ -33,7 +33,7 @@ class CheckTokensCommand extends Command
                 $cases[] = "WHEN `id` = {$userId} THEN " . ((int) $isAvailable);
             }
             $casesSql = implode("\n", $cases);
-            \Illuminate\Support\Facades\DB::statement("UPDATE `vk_users` SET `is_token_available` = CASE {$casesSql} ELSE 0 END WHERE 1");
+            \Illuminate\Support\Facades\DB::statement("UPDATE `vk_users` SET `is_token_available` = CASE {$casesSql} ELSE 0 END, `is_token_valid` = CASE {$casesSql} ELSE 0 END WHERE 1");
         }
 
         $unavailable = VkUser::where('is_token_available', false)->get();

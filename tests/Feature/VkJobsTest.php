@@ -148,6 +148,26 @@ class VkJobsTest extends TestCase
         $this->assertStringContainsString('токен', $task->error ?? '');
     }
 
+    public function test_create_vk_post_job_fails_when_token_invalid(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->withInvalidToken()->create(['agent_id' => $offer->agent_id]);
+        $publication = Publication::factory()->forOffer($offer)->create();
+        $task = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_POST)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new CreateVkPostJob($task->id);
+
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
+        $this->assertStringContainsString('токен', $task->error ?? '');
+    }
+
     public function test_create_vk_post_job_sets_failed_on_vk_api_exception(): void
     {
         $task = $this->createPostTask();

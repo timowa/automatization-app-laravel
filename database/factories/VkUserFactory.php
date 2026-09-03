@@ -23,11 +23,17 @@ class VkUserFactory extends Factory
             'last_name' => fake()->lastName,
             'screen_name' => fake()->userName,
             'is_token_available' => true,
+            'is_token_valid' => true,
         ];
     }
 
     public function withoutToken(): static
     {
         return $this->state(fn () => ['vk_token' => '']);
+    }
+
+    public function withInvalidToken(): static
+    {
+        return $this->state(fn () => ['is_token_valid' => false]);
     }
 }

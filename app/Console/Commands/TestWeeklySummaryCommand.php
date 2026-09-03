@@ -27,7 +27,7 @@ class TestWeeklySummaryCommand extends Command
 
         /** @var VkUser|null $vkUser */
         $vkUser = $agent->vkUser;
-        if (!$vkUser || $vkUser->getToken() === '') {
+        if (!$vkUser || !$vkUser->isTokenValid()) {
             $this->error('Для агента не задан токен');
             Log::channel('job')->warning('Тестовая сводка не запущена: не задан токен', [
                 'agent_id' => $agentId,

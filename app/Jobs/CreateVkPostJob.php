@@ -72,7 +72,7 @@ class CreateVkPostJob implements ShouldQueue
                 throw new NotFoundException('Не найдены данные агента');
             }
 
-            if ($vkUser->getToken() === '') {
+            if (!$vkUser || !$vkUser->isTokenValid()) {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -112,6 +112,9 @@ class CreateVkPostJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка создания поста по офферу', ['task_id' => $this->taskId]);
             Log::channel('vk')->warning($e->getMessage());
         } catch (VkApiException $e) {
+            if ($e->getErrorCode() === 5 && isset($vkUser)) {
+                $vkUser->update(['is_token_valid' => false]);
+            }
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,

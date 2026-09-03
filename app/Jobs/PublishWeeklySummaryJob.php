@@ -40,7 +40,7 @@ class PublishWeeklySummaryJob implements ShouldQueue
 
         /** @var VkUser|null $vkUser */
         $vkUser = $agent->vkUser;
-        if (! $vkUser || $vkUser->getToken() === '') {
+        if (! $vkUser || !$vkUser->isTokenValid()) {
             Log::channel('job')->warning('Токен недоступен для еженедельной сводки', [
                 'agent_id' => $this->agentId,
             ]);
@@ -115,6 +115,9 @@ class PublishWeeklySummaryJob implements ShouldQueue
                 ]);
             }
         } catch (VKApiException $e) {
+            if ($e->getErrorCode() === 5 && isset($vkUser)) {
+                $vkUser->update(['is_token_valid' => false]);
+            }
             Log::channel('job')->warning('Ошибка публикации еженедельной сводки', [
                 'agent_id' => $agent->id,
             ]);

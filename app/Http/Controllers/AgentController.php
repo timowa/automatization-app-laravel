@@ -196,6 +196,7 @@ class AgentController extends Controller
         $vkUser->vk_token = $query['access_token'];
         $vkUser->email = $query['email'] ?? null;
         $vkUser->is_token_available = true;
+        $vkUser->is_token_valid = true;
         $vkUser->save();
 
         Log::channel('job')->info('Токен агента обновлён', [

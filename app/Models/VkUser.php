@@ -27,6 +27,7 @@ class VkUser extends Model
         'vk_token',
         'email',
         'is_token_available',
+        'is_token_valid',
         'first_name',
         'last_name',
         'screen_name',
@@ -54,6 +55,7 @@ class VkUser extends Model
 
     protected $casts = [
         'is_token_available' => 'boolean',
+        'is_token_valid' => 'boolean',
         'is_closed' => 'boolean',
         'can_access_closed' => 'boolean',
         'online' => 'boolean',
@@ -99,6 +101,13 @@ class VkUser extends Model
     public function getToken(): string
     {
         return $this->vk_token ?? '';
+    }
+
+    public function isTokenValid(): bool
+    {
+        return $this->vk_token !== null
+            && $this->vk_token !== ''
+            && (bool) $this->is_token_valid;
     }
 
     public function getAgentId(): int

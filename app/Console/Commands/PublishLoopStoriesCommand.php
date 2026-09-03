@@ -58,7 +58,7 @@ class PublishLoopStoriesCommand extends Command
                 /** @var VkUser|null $vkUser */
                 $vkUser = $agent?->vkUser;
 
-                if (!$vkUser || $vkUser->getToken() === '') {
+                if (!$vkUser || !$vkUser->isTokenValid()) {
                     Log::channel('job')->warning('Не задан токен для loop-истории', [
                         'offer_id' => $offer->id,
                     ]);
