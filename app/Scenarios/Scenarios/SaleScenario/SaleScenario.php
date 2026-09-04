@@ -30,7 +30,7 @@ class SaleScenario extends Scenario
         return [
             PublicationTaskType::VK_UPLOAD_IMAGES,
             PublicationTaskType::VK_POST,
-            PublicationTaskType::VK_LIKE,
+//            PublicationTaskType::VK_LIKE,
             PublicationTaskType::VK_REPOST,
             PublicationTaskType::VK_LOOP_STORY,
             PublicationTaskType::VK_COMMENT,

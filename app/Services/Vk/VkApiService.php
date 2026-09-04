@@ -69,9 +69,9 @@ class VkApiService
             $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
-            Log::channel('vk')->info('Получен адрес для загрузки изображения', ['address' => $address]);
+            Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
-            Log::channel('vk')->info('Изображение загружено', ['response' => $photo, 'params' => [
+            Log::channel('job')->info('Изображение загружено', ['response' => $photo, 'params' => [
                 'upload_url' => $address['upload_url'],
                 'parameter_name' => 'photo',
                 'path' => $filename
@@ -84,7 +84,7 @@ class VkApiService
                 'caption' => $caption
             ]);
 
-            Log::channel('vk')->info('Ответ вк по сохранению изображения', ['response' => $saveResponse, 'params' => [
+            Log::channel('job')->info('Ответ вк по сохранению изображения', ['response' => $saveResponse, 'params' => [
                 'server' => $photo['server'],
                 'photo' => $photo['photo'],
                 'hash' => $photo['hash'],
