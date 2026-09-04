@@ -81,10 +81,13 @@ class VkStoriesGenerator
             $insertImage = $manager->decodePath($imagePath);
             $insertImage->cover(width: 900, height: 600);
             $img->insert($insertImage, 0, 200, 'center');
-            unlink($imagePath);
         } catch (Throwable $e) {
             Log::channel('vk')->error('Ошибка генерации изображения истории: ' . $e->getMessage());
             throw $e;
+        } finally {
+            if (file_exists($imagePath)) {
+                unlink($imagePath);
+            }
         }
 
         $fileName = sprintf(

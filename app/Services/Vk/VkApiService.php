@@ -65,19 +65,34 @@ class VkApiService
 
         try {
             $filename = downloadFile($imageUrl, storage_path('app/tmp'));
+            Log::channel('vk')->info('Файл изображения скачан', ['file_name' => $filename]);
             $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
+            Log::channel('vk')->info('Получен адрес для загрузки изображения', ['address' => $address]);
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
+            Log::channel('vk')->info('Изображение загружено', ['response' => $photo, 'params' => [
+                'upload_url' => $address['upload_url'],
+                'parameter_name' => 'photo',
+                'path' => $filename
+            ]]);
             $saveResponse = $this->client->photos()->saveWallPhoto($this->token, [
                 'server' => $photo['server'],
                 'photo' => $photo['photo'],
                 'hash' => $photo['hash'],
                 'user_id' => $ownerId,
                 'caption' => $caption
-            ])[0];
+            ]);
 
-            return (int) $saveResponse['id'];
+            Log::channel('vk')->info('Ответ вк по сохранению изображения', ['response' => $saveResponse, 'params' => [
+                'server' => $photo['server'],
+                'photo' => $photo['photo'],
+                'hash' => $photo['hash'],
+                'user_id' => $ownerId,
+                'caption' => $caption
+            ]]);
+
+            return (int) $saveResponse[0]['id'];
         } catch (\Throwable $th) {
             Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте: ' . $th->getMessage(), [
                 'image_original_url' => $imageUrl,
