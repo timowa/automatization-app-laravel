@@ -75,7 +75,7 @@ class VkApiService
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
 
             if (empty($photo['photo'])) {
-                throw new \RuntimeException('Не удалось загрузить изображение');
+                throw new \RuntimeException('Не удалось загрузить изображение: ' . json_encode($photo, JSON_UNESCAPED_UNICODE));
             }
 
             Log::channel('job')->info('Изображение загружено', ['response' => $photo, 'params' => [
