@@ -24,7 +24,7 @@ class ReceiveOfferWebhookAction
     public function execute(array $data): void
     {
         $dataOffers = $data['offers'];
-        Log::channel('job')->info('new Offer Request', ['count' => count($dataOffers)]);
+        Log::channel('job')->info('new Offer Request', ['count' => count($dataOffers), 'offers' => $dataOffers]);
 
         foreach ($dataOffers as $v) {
             try {
