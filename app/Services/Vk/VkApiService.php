@@ -63,12 +63,12 @@ class VkApiService
     public function uploadWallPhoto(string $imageUrl, int $ownerId, string $caption = ''): ?int
     {
         $filename = null;
-
+        $imageWatermarker = new \App\Helpers\ImageWatermarker;
         try {
             $filename = downloadFile($imageUrl, storage_path('app/tmp'));
             $imageInfo = @getimagesize($filename);
             Log::channel('job')->info('Файл изображения скачан через CURL', ['file_name' => $filename, 'image_info' => $imageInfo]);
-            $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
+            $filename = $imageWatermarker->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
             Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
@@ -86,7 +86,7 @@ class VkApiService
                 $filename = downloadFileGD($imageUrl, storage_path('app/tmp'));
                 $imageInfo = @getimagesize($filename);
                 Log::channel('job')->info('Файл изображения скачан через CURL и сохранен через GD', ['file_name' => $filename, 'image_info' => $imageInfo]);
-                $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
+                $filename = $imageWatermarker->apply($filename);
 
                 $address = $this->client->photos()->getWallUploadServer($this->token);
                 Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
