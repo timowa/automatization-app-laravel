@@ -63,6 +63,69 @@ if (!function_exists('downloadFile')) {
     }
 }
 
+if (!function_exists('downloadFileGD')) {
+    function downloadFileGD(string $url, string $directory): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+
+        if (!$extension) {
+            $extension = 'jpg';
+        }
+
+        $filename = sprintf(
+            '%s/%s.%s',
+            rtrim($directory, '/'),
+            uniqid('vk_', true),
+            $extension
+        );
+
+        $ch = curl_init($url);
+
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_TIMEOUT => 15,
+            CURLOPT_FAILONERROR => true,
+            CURLOPT_USERAGENT => 'Mozilla/5.0',
+        ]);
+
+        $content = curl_exec($ch);
+
+        if ($content === false) {
+            $error = curl_error($ch);
+            curl_close($ch);
+            throw new RuntimeException($error);
+        }
+
+        curl_close($ch);
+
+        $image = imagecreatefromstring($content);
+
+        if ($image === false) {
+            throw new RuntimeException('Failed to create image from downloaded content');
+        }
+
+        $saved = match ($extension) {
+            'png' => imagepng($image, $filename),
+            'gif' => imagegif($image, $filename),
+            'webp' => imagewebp($image, $filename),
+            'bmp' => imagebmp($image, $filename),
+            default => imagejpeg($image, $filename, 90),
+        };
+
+        imagedestroy($image);
+
+        if (!$saved) {
+            @unlink($filename);
+            throw new RuntimeException('Failed to save image to ' . $filename);
+        }
+
+        return $filename;
+    }
+}
+
 if (!function_exists('isImageUrl')) {
     function isImageUrl(string $url): bool
     {

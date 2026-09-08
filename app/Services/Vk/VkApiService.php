@@ -67,11 +67,12 @@ class VkApiService
         try {
             $filename = downloadFile($imageUrl, storage_path('app/tmp'));
             $imageInfo = @getimagesize($filename);
-            Log::channel('job')->info('Файл изображения скачан', ['file_name' => $filename, 'image_info' => $imageInfo]);
+            Log::channel('job')->info('Файл изображения скачан через CURL', ['file_name' => $filename, 'image_info' => $imageInfo]);
             $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
             Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
+
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
             Log::channel('job')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
                 'upload_url' => $address['upload_url'],
@@ -80,7 +81,27 @@ class VkApiService
             ]]);
 
             if (empty($photo['photo'])) {
-                throw new \RuntimeException('Не удалось загрузить изображение');
+                Log::channel('job')->warning('Не удалось загрузить файл скачанный через CURL. Пробуем сохранить через GD');
+
+                $filename = downloadFileGD($imageUrl, storage_path('app/tmp'));
+                $imageInfo = @getimagesize($filename);
+                Log::channel('job')->info('Файл изображения скачан через CURL и сохранен через GD', ['file_name' => $filename, 'image_info' => $imageInfo]);
+                $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
+
+                $address = $this->client->photos()->getWallUploadServer($this->token);
+                Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
+
+                $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
+                Log::channel('job')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
+                    'upload_url' => $address['upload_url'],
+                    'parameter_name' => 'photo',
+                    'path' => $filename
+                ]]);
+
+            }
+
+            if (empty($photo['photo'])) {
+                throw new \RuntimeException('Не удалось загрузить изображение скачанное через CURL и GD');
             }
 
             $saveResponse = $this->client->photos()->saveWallPhoto($this->token, [
