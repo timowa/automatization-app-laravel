@@ -6,6 +6,7 @@ namespace App\Services\Vk;
 
 use Exception;
 use GuzzleHttp\Client;
+use http\Exception\RuntimeException;
 use Illuminate\Support\Facades\Log;
 use VK\Client\Enums\VKLanguage;
 use VK\Client\VKApiClient;
@@ -65,12 +66,18 @@ class VkApiService
 
         try {
             $filename = downloadFile($imageUrl, storage_path('app/tmp'));
-            Log::channel('vk')->info('Файл изображения скачан', ['file_name' => $filename]);
+            $imageInfo = @getimagesize($filename);
+            Log::channel('job')->info('Файл изображения скачан', ['file_name' => $filename, 'image_info' => $imageInfo]);
             $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
             Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
+
+            if (empty($photo['photo'])) {
+                throw new RuntimeException('Не удалось загрузить изображение');
+            }
+
             Log::channel('job')->info('Изображение загружено', ['response' => $photo, 'params' => [
                 'upload_url' => $address['upload_url'],
                 'parameter_name' => 'photo',
