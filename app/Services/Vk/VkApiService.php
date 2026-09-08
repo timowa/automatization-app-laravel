@@ -73,16 +73,16 @@ class VkApiService
             $address = $this->client->photos()->getWallUploadServer($this->token);
             Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
-
-            if (empty($photo['photo'])) {
-                throw new \RuntimeException('Не удалось загрузить изображение: ' . json_encode($photo, JSON_UNESCAPED_UNICODE));
-            }
-
-            Log::channel('job')->info('Изображение загружено', ['response' => $photo, 'params' => [
+            Log::channel('job')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
                 'upload_url' => $address['upload_url'],
                 'parameter_name' => 'photo',
                 'path' => $filename
             ]]);
+
+            if (empty($photo['photo'])) {
+                throw new \RuntimeException('Не удалось загрузить изображение');
+            }
+
             $saveResponse = $this->client->photos()->saveWallPhoto($this->token, [
                 'server' => $photo['server'],
                 'photo' => $photo['photo'],
