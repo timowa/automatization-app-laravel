@@ -7,10 +7,10 @@ namespace App\Http\Controllers;
 use App\Actions\Vk\SyncVkUserAction;
 use App\Http\Requests\StoreAgentRequest;
 use App\Http\Requests\UpdateAgentRequest;
-use App\Jobs\CreateVkPostJob;
 use App\Models\Agent;
 use App\Models\VkUser;
 use App\Scenarios\ScenarioFactory;
+use App\Services\Vk\VkApiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -43,8 +43,8 @@ class AgentController extends Controller
 
     public function create()
     {
-        $agent = new Agent();
-        $vkUser = new VkUser();
+        $agent = new Agent;
+        $vkUser = new VkUser;
 
         return view('agent-form', compact('agent', 'vkUser'));
     }
@@ -60,13 +60,13 @@ class AgentController extends Controller
 
         Log::channel('job')->info('Агент создан', ['agent_id' => $agent->id, 'name' => $agent->name]);
 
-        viewJson(true, ['Агент создан'], '/agents/edit/' . $agent->id);
+        viewJson(true, ['Агент создан'], '/agents/edit/'.$agent->id);
     }
 
     public function edit(int $id)
     {
         $agent = Agent::findOrFail($id);
-        $vkUser = $agent->vkUser ?? new VkUser();
+        $vkUser = $agent->vkUser ?? new VkUser;
 
         // Статистика по офферам и сценариям — берём последний снимок для каждого поста
         $latestStats = DB::table('vk_post_stats as ps')
@@ -94,7 +94,7 @@ class AgentController extends Controller
         $statsByOffer = [];
         foreach ($latestStats as $row) {
             $code = $row->code;
-            if (!isset($statsByOffer[$code])) {
+            if (! isset($statsByOffer[$code])) {
                 $statsByOffer[$code] = [
                     'total' => ['views' => 0, 'reposts' => 0, 'likes' => 0, 'comments' => 0],
                     'scenarios' => [],
@@ -106,7 +106,7 @@ class AgentController extends Controller
             $statsByOffer[$code]['total']['comments'] += $row->comments;
 
             $scenario = $row->scenario;
-            if (!isset($statsByOffer[$code]['scenarios'][$scenario])) {
+            if (! isset($statsByOffer[$code]['scenarios'][$scenario])) {
                 $statsByOffer[$code]['scenarios'][$scenario] = [
                     'views' => 0, 'reposts' => 0, 'likes' => 0, 'comments' => 0,
                 ];
@@ -142,7 +142,7 @@ class AgentController extends Controller
 
         Log::channel('job')->info('Агент обновлен', ['agent_id' => $id, 'name' => $agent->name]);
 
-        viewJson(true, ['Агент обновлён'], '/agents/edit/' . $id);
+        viewJson(true, ['Агент обновлён'], '/agents/edit/'.$id);
     }
 
     public function delete(Request $request, int $id)
@@ -190,7 +190,7 @@ class AgentController extends Controller
             viewJson(false, ['Указана некорректная ссылка: не найден access_token или user_id']);
         }
 
-        $vkUser = $agent->vkUser ?? new VkUser();
+        $vkUser = $agent->vkUser ?? new VkUser;
         $vkUser->agent_id = $agent->id;
         $vkUser->vk_user_id = (string) $query['user_id'];
         $vkUser->vk_token = $query['access_token'];
@@ -203,6 +203,41 @@ class AgentController extends Controller
             'vk_user_id' => $vkUser->vk_user_id,
         ]);
 
-        viewJson(true, ['Токен обновлён'], '/agents/edit/' . $id);
+        viewJson(true, ['Токен обновлён'], '/agents/edit/'.$id);
+    }
+
+    public function getTokenPermissions(int $id)
+    {
+        $agent = Agent::findOrFail($id);
+        $vkUser = $agent->vkUser;
+
+        if (! $vkUser || ! $vkUser->exists()) {
+            viewJson(false, ['У агента не сохранён VK-пользователь']);
+        }
+
+        $token = $vkUser->getToken();
+        if ($token === '') {
+            viewJson(false, ['Токен не найден']);
+        }
+
+        try {
+            $vkApi = app(VkApiService::class);
+            $vkApi->setToken($token);
+            $response = $vkApi->getClient()->account()->getAppPermissions($token);
+
+            Log::channel('job')->info('Получены права токена агента', [
+                'agent_id' => $id,
+                'vk_user_id' => $vkUser->vk_user_id,
+            ]);
+
+            viewJson(true, [json_encode($response, JSON_UNESCAPED_UNICODE)]);
+        } catch (\Throwable $e) {
+            Log::channel('vk')->error('Ошибка получения прав токена: '.$e->getMessage(), [
+                'agent_id' => $id,
+                'vk_user_id' => $vkUser->vk_user_id,
+            ]);
+
+            viewJson(false, ['Ошибка получения прав токена']);
+        }
     }
 }

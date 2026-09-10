@@ -6,7 +6,7 @@
 @section('content')
     @php
         $link = 'https://oauth.vk.com/authorize?' . http_build_query([
-        'client_id' => 4510232,
+        'client_id' => 4775211,
         'display' => 'page',
         'redirect_uri' => 'https://oauth.vk.com/blank.html',
         'scope' => 203374166,

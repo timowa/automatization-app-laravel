@@ -34,6 +34,7 @@
 
             @if (!$isCreate)
                 <a href="/agents/change-token/{{ $agent->id }}" class="block w-full text-center mb-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Обновить токен</a>
+                <button type="button" class="check-token-permissions block w-full text-center mb-4 py-2 bg-gray-200 rounded hover:bg-gray-300" data-url="/agents/token-permissions/{{ $agent->id }}" data-csrf="{{ csrf_token() }}">Получить права токена</button>
             @endif
 
             <button type="submit" class="w-full py-2 bg-blue-600 text-white rounded hover:bg-blue-700">{{ $submitLabel }}</button>
@@ -127,6 +128,42 @@
                     if (input.value !== formatted) {
                         input.value = formatted;
                     }
+                });
+            });
+
+            document.querySelectorAll('.check-token-permissions').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    button.disabled = true;
+                    const originalText = button.textContent;
+                    button.textContent = 'Загрузка...';
+
+                    fetch(button.dataset.url, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': button.dataset.csrf,
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json',
+                        },
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        let messages = data.messages || [];
+                        if (!messages.length && data.message) {
+                            messages = [data.message];
+                        }
+                        if (messages.length) {
+                            alert(messages.join('\n'));
+                        }
+                    })
+                    .catch(err => {
+                        alert('Ошибка запроса');
+                        console.error(err);
+                    })
+                    .finally(() => {
+                        button.disabled = false;
+                        button.textContent = originalText;
+                    });
                 });
             });
         })();
