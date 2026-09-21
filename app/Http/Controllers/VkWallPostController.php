@@ -16,8 +16,6 @@ class VkWallPostController extends Controller
             ->join('offers', 'offers.id', '=', 'vk_posts.offer_id')
             ->join('publication_tasks', 'publication_tasks.id', '=', 'vk_posts.task_id')
             ->join('publications', 'publications.id', '=', 'publication_tasks.publication_id')
-            ->leftJoin('agents', 'agents.id', '=', 'offers.agent_id')
-            ->leftJoin('vk_users', 'vk_users.agent_id', '=', 'agents.id')
             ->select(
                 'vk_posts.id as vk_post_id',
                 'vk_posts.post_id',
@@ -25,7 +23,6 @@ class VkWallPostController extends Controller
                 'vk_posts.posted_at',
                 'offers.code as offer_code',
                 'publications.scenario',
-                'vk_users.vk_user_id as vk_user_id',
             )
             ->orderBy('vk_posts.posted_at', 'desc')
             ->paginate(25);
@@ -33,12 +30,10 @@ class VkWallPostController extends Controller
         $postIds = collect($posts->items())->pluck('vk_post_id')->toArray();
         $stats = $this->loadLatestStats($postIds);
 
-        $rows = $posts->map(function ($post) use ($stats) {
+        $posts->getCollection()->transform(function ($post) use ($stats) {
             $postStats = $stats[$post->vk_post_id] ?? null;
             $scenario = $this->resolveScenarioLabel($post->scenario);
-            $postUrl = $post->vk_user_id
-                ? 'https://vk.ru/wall'.$post->vk_user_id.'_'.$post->post_id
-                : null;
+            $postUrl = 'https://vk.com/wall' . $post->owner_id . '_' . $post->post_id;
 
             return (object) [
                 'code' => $post->offer_code,
@@ -54,7 +49,7 @@ class VkWallPostController extends Controller
             ];
         });
 
-        return view('vk-posts-list', compact('rows'));
+        return view('vk-posts-list', compact('posts'));
     }
 
     /**
