@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\DB;
 
 class GetStatsAction
 {
-    public function execute(string $code): array
+    public function execute(string $offerId): array
     {
         $rows = DB::table('vk_posts as vp')
             ->join('offers as o', 'o.id', '=', 'vp.offer_id')
@@ -18,7 +18,7 @@ class GetStatsAction
                             ->whereColumn('ps2.vk_post_id', 'ps.vk_post_id');
                     });
             })
-            ->where('o.code', $code)
+            ->where('o.offer_id', $offerId)
             ->select(
                 'vp.owner_id',
                 'vp.post_id',

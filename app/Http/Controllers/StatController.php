@@ -17,18 +17,18 @@ class StatController extends Controller
 
     public function getStats(Request $request): JsonResponse
     {
-        $code = $request->query('code');
+        $offerId = $request->query('offer_id');
 
-        if ($code === null || $code === '') {
-            return response()->json(['error' => 'code is required'], 400);
+        if ($offerId === null || $offerId === '') {
+            return response()->json(['error' => 'offer_id is required'], 400);
         }
 
-        $exists = DB::table('offers')->where('code', $code)->exists();
+        $exists = DB::table('offers')->where('offer_id', $offerId)->exists();
         if (!$exists) {
             return response()->json(['error' => 'Offer not found'], 404);
         }
 
-        $result = $this->getStatsAction->execute($code);
+        $result = $this->getStatsAction->execute($offerId);
 
         return response()->json($result);
     }
