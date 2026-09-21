@@ -3,6 +3,7 @@
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OfferController;
+use App\Http\Controllers\VkWallPostController;
 use App\Http\Middleware\AdminAuthMiddleware;
 use App\Http\Middleware\ApiKeyMiddleware;
 use Illuminate\Support\Facades\Route;
@@ -24,4 +25,5 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::get('/agents/change-token/{id}', [AgentController::class, 'changeToken']);
     Route::post('/agents/update-token/{id}', [AgentController::class, 'updateToken']);
     Route::post('/agents/token-permissions/{id}', [AgentController::class, 'getTokenPermissions']);
+    Route::get('/posts', [VkWallPostController::class, 'index']);
 });

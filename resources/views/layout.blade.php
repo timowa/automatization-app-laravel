@@ -12,7 +12,10 @@
         @if (session('is_admin'))
             <nav class="bg-white shadow">
                 <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
-                    <a href="/agents" class="font-bold text-lg">Агенты</a>
+                    <div class="flex gap-6">
+                        <a href="/agents" class="font-bold text-lg">Агенты</a>
+                        <a href="/posts" class="font-bold text-lg">Посты</a>
+                    </div>
                     <form action="/logout" method="POST" class="inline">
                         @csrf
                         <button type="submit" class="text-sm text-red-600 hover:underline">Выйти</button>

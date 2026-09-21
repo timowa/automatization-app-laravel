@@ -12,7 +12,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AgentSeeder::class,
-            OfferSeeder::class,
             VkUserSeeder::class,
             VkGroupSeeder::class,
             VkPostStatSeeder::class,
