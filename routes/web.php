@@ -3,12 +3,14 @@
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\OfferController;
+use App\Http\Controllers\StatController;
 use App\Http\Controllers\VkWallPostController;
 use App\Http\Middleware\AdminAuthMiddleware;
 use App\Http\Middleware\ApiKeyMiddleware;
 use Illuminate\Support\Facades\Route;
 
 Route::post('/offer', [OfferController::class, 'offer'])->middleware(ApiKeyMiddleware::class);
+Route::get('/api/get-stats', [StatController::class, 'getStats'])->middleware(ApiKeyMiddleware::class);
 
 Route::get('/login', [AuthController::class, 'loginForm'])->name('login.form');
 Route::post('/login', [AuthController::class, 'login']);

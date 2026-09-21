@@ -21,6 +21,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
         $middleware->preventRequestForgery(except: [
             'offer',
+            'api/get-stats',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
