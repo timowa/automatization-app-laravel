@@ -11,6 +11,5 @@ Schedule::command('vk:check-tokens')->daily();
 Schedule::command('vk:daily-report')->dailyAt('07:00');
 Schedule::command('vk:sync-users')->daily();
 Schedule::command('vk:publish-loop-stories')->cron('0 3 */3 * *');
-Schedule::command('vk:publish-weekly-summary')->weeklyOn(5, '17:00');
 Schedule::command('vk:get-stats')->everyTwoHours();
 

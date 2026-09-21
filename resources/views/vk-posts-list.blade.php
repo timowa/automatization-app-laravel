@@ -17,7 +17,7 @@
                 </tr>
             </thead>
             <tbody class="divide-y">
-                @foreach ($rows as $row)
+                @foreach ($posts as $row)
                     <tr>
                         <td class="px-4 py-2">{{ $row->code }}</td>
                         <td class="px-4 py-2">
@@ -73,6 +73,6 @@
     </div>
 
     <div class="mt-4">
-        {{ $rows->links() }}
+        {{ $posts->links() }}
     </div>
 @endsection
