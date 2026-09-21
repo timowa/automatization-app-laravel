@@ -134,8 +134,8 @@ class UploadVkImagesJob implements ShouldQueue
                         ]);
                     } else {
                         $allUploaded = false;
-                        usleep(self::RETRY_DELAY_MICROSECONDS);
                     }
+                    usleep(self::RETRY_DELAY_MICROSECONDS);
                 }
 
                 if (!$allUploaded) {
