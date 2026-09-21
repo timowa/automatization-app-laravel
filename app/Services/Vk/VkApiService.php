@@ -224,10 +224,10 @@ VKSCRIPT;
      * @throws VKApiException
      * @throws VKClientException
      */
-    public function sendTokensMessage(string $text): void
+    public function sendTechMessage(string $text): void
     {
         $token = config('vk.notify_group_token');
-        $peerIds = config('vk.notify_peer_id');
+        $peerIds = config('vk.notify_peer_ids');
 
         if ($token === '' || $peerIds === '') {
             throw new Exception('VK notify credentials not configured');

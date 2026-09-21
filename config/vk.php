@@ -6,5 +6,5 @@ return [
     'version' => env('VK_API_VERSION', '5.199'),
 
     'notify_group_token' => env('VK_NOTIFY_GROUP_TOKEN', ''),
-    'notify_peer_id' => env('VK_NOTIFY_PEER_ID', ''),
+    'notify_peer_ids' => env('VK_NOTIFY_PEER_IDS', ''),
 ];

@@ -71,9 +71,9 @@
 
 Проверяет доступность токена через `users.get`. Возвращает true/false.
 
-#### sendTokensMessage(string $text): void
+#### sendTechMessage(string $text): void
 
-Отправляет уведомление через `messages.send` в группу уведомлений. Токен и peer_id берутся из `config('vk.notify_group_token')` и `config('vk.notify_peer_id')`.
+Отправляет техническое уведомление через `messages.send` в группу уведомлений. Токен и peer_ids берутся из `config('vk.notify_group_token')` и `config('vk.notify_peer_ids')`.
 
 ## FakeVkApiService
 

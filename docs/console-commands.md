@@ -16,7 +16,7 @@ Artisan-команды для фоновых задач: проверка ток
 1. Перебирает всех `VkUser`, проверяет токен через `vkApi->checkToken()`.
 2. Обновляет `is_token_available` в БД (batch UPDATE через CASE).
 3. Находит недоступных, формирует текст с именами и ссылками на профили.
-4. Отправляет уведомление через `vkApi->sendTokensMessage()`.
+4. Отправляет уведомление через `vkApi->sendTechMessage()`.
 5. Логирует (канал `check_tokens`).
 
 `usleep(300_000)` между проверками (rate limit).
@@ -37,6 +37,19 @@ Artisan-команды для фоновых задач: проверка ток
 3. `usleep(350_000)` между итерациями.
 
 Шаблон истории выбирается по типу сделки (SaleStoriesTemplate / RentStoriesTemplate).
+
+### vk:daily-report
+
+**Файл:** `app/Console/Commands/DailyReportCommand.php`
+
+Ежедневный отчёт о работе системы. Запускается по расписанию в 07:00.
+
+Поток:
+1. Считает офферы за последние 24 часа (`offers.created_at >= now()->subDay()`).
+2. Считает опубликованные посты за 24 часа (`vk_posts.posted_at >= now()->subDay()`).
+3. Считает ошибки в задачах за 24 часа (`publication_tasks.status = 'failed' AND updated_at >= now()->subDay()`).
+4. Формирует текст отчёта и отправляет через `vkApi->sendTechMessage()`.
+5. Логирует: info в канал `job` при успехе, warning в `job` + error в `vk` при ошибке.
 
 ### vk:sync-users
 

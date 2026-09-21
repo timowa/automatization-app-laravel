@@ -40,14 +40,15 @@ class CheckTokensCommand extends Command
         if ($unavailable->isNotEmpty()) {
             $agents = \App\Models\Agent::whereIn('id', $unavailable->pluck('agent_id'))->get()->keyBy('id');
             $lines = [];
+            $lines[] = "Невалидные токены у агентов: \n";
             foreach ($unavailable as $vkUser) {
                 $agent = $agents->get($vkUser->agent_id);
-                $lines[] = ($agent->name ?? 'Агент') . '[https://vk.ru/id' . $vkUser->vk_user_id . ']';
+                $lines[] = trim('- ' . ($agent->name ?? ('Агент' . '[https://vk.com/id' . $vkUser->vk_user_id . ']')));
             }
             $text = implode("\n", $lines);
 
             try {
-                $vkApi->sendTokensMessage($text);
+                $vkApi->sendTechMessage($text);
                 $logger->info($text);
             } catch (\Exception $e) {
                 $logger->error($e->getMessage());
