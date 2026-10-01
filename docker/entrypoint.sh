@@ -10,3 +10,6 @@ mkdir -p /var/www/html/storage/logs/vk/posts \
 
 # Запускаем php-fpm (master от root, workers от www-data)
 exec php-fpm
+
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
+chmod -R ug+rwX /var/www/html/storage /var/www/html/bootstrap/cache

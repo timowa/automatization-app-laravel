@@ -22,12 +22,22 @@ INSERT INTO `agents` (`id`, `name`, `phone`, `updated_at`) VALUES
 (51, 'Лобода Анна Витальевна ', '79235836393', NULL),
 (52, 'Щетинин Тимофей Дмитриевич', '79953742476', NULL),
 (60, 'Бахман Евгения Альбертовна', '79993136393', NULL);
-INSERT INTO `offers` (`id`, `code`, `stage`, `status`, `offer_id`, `price`, `area`, `kitchen_area`, `living_area`, `city`, `location`, `agent_id`, `images`,
+INSERT INTO `offers` (`id`, `code`, `stage`, `status`, `offer_id`, `price`, `area`, `kitchen_area`, `living_area`, `city`, `location`, `agent_id`,
 `deal`,
 `category`,
 `rooms`, `rooms_offered`, `floor`, `floors_total`, `commission`, `deposit`, `created_at`) VALUES
-(1, '190-002', 2, 1, 53163, 18000, 26.00, 4.00, 12.00, 1, '{\"lat\": null, \"lng\": null, \"city\": \"Абакан\", \"address\": \"ул. Торосова, 7\"}', 38, '[\"https://abakan.brokerplus.ru/images/abakan/offer/53163/556cc25e9e8f48dc0c727aeab6bf7267.jpg\", \"https://abakan.brokerplus.ru/images/abakan/offer/53163/8872876665ebb7a5009583d9f43b6bea.jpg\", \"https://abakan.brokerplus.ru/images/abakan/offer/53163/a464b75ac9ec74d11c2c333f9db50db7.jpg\", \"https://abakan.brokerplus.ru/images/abakan/offer/53163/5b2219f5a014da3cbc3fdda8c582e1c4.jpg\"]', 3, 1, 1, 0, 0, 9, NULL, NULL, '2026-07-21 15:12:56'),
-(2, '190-003', 2, 1, 53226, 6950000, 51.00, 10.00, 35.00, 2, '{\"lat\": null, \"lng\": null, \"city\": \"Кызыл\", \"address\": \"ул. Калинина, 24\"}', 35, '[\"https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/dfe758a04f96e498c650e184f376ebf0.jpg\", \"https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/d212cbcc2a6ae74d06c3e8336d5ffbe8.jpg\", \"https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/9cb7ccda8129bd424d0d2f54c8f5ba3a.jpg\", \"https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/f63506edd4e1f4611c3d4f899c85912b.jpg\"]', 1, 1, 2, 0, 0, 5, NULL, NULL, '2026-07-24 10:36:33');
+(1, '190-002', 2, 1, 53163, 18000, 26.00, 4.00, 12.00, 1, '{\"lat\": null, \"lng\": null, \"city\": \"Абакан\", \"address\": \"ул. Торосова, 7\"}', 38, 3, 1, 1, 0, 0, 9, NULL, NULL, '2026-07-21 15:12:56'),
+(2, '190-003', 2, 1, 53226, 6950000, 51.00, 10.00, 35.00, 2, '{\"lat\": null, \"lng\": null, \"city\": \"Кызыл\", \"address\": \"ул. Калинина, 24\"}', 35, 1, 1, 2, 0, 0, 5, NULL, NULL, '2026-07-24 10:36:33');
+
+INSERT INTO `offer_images` (`offer_id`, `original_url`, `sort_order`) VALUES
+(1, 'https://abakan.brokerplus.ru/images/abakan/offer/53163/556cc25e9e8f48dc0c727aeab6bf7267.jpg', 0),
+(1, 'https://abakan.brokerplus.ru/images/abakan/offer/53163/8872876665ebb7a5009583d9f43b6bea.jpg', 1),
+(1, 'https://abakan.brokerplus.ru/images/abakan/offer/53163/a464b75ac9ec74d11c2c333f9db50db7.jpg', 2),
+(1, 'https://abakan.brokerplus.ru/images/abakan/offer/53163/5b2219f5a014da3cbc3fdda8c582e1c4.jpg', 3),
+(2, 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/dfe758a04f96e498c650e184f376ebf0.jpg', 0),
+(2, 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/d212cbcc2a6ae74d06c3e8336d5ffbe8.jpg', 1),
+(2, 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/9cb7ccda8129bd424d0d2f54c8f5ba3a.jpg', 2),
+(2, 'https://kyzyl.brokerplus.ru/images/kyzyl/offer/53226/f63506edd4e1c4611c3d4f899c85912b.jpg', 3);
 
 INSERT INTO `vk_users` (`id`, `agent_id`, `vk_user_id`, `vk_token`, `is_token_available`, `email`, `first_name`, `last_name`, `screen_name`, `domain`, `deactivated`, `is_closed`, `can_access_closed`, `sex`, `bdate`, `relation`, `home_town`, `city_id`, `city_name`, `country_id`, `country_name`, `online`, `last_seen_at`, `last_seen_platform`, `followers_count`, `friend_status`, `status`, `verified`, `raw`) VALUES
 (11, '11', '501508436', 'vk1.a.5SapWVgU6aMOfnE6jG58sm9Kji-aebcmMFQf8YuCnaeol1e3xVmZ6kfRgDdMOkDdyCBlkTNZXkuGCTEPJV2hcQ1vDw2BK8GmxlSHwnO2hT8vEFhGXDSFKooOckWkFNYKdOQ9WeJnB8MlqLfMfEcmbnYMfrcSxr9onWaguQL0P0V4j3eHjUjMO4BGQwTKByMmNxT7qXrCXjpaY1YiRrSS7A', 0, '', NULL, NULL, NULL, NULL, NULL, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, 0, NULL),

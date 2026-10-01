@@ -243,6 +243,50 @@ VKSCRIPT;
         ]);
     }
 
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function getFriends(int $userId): array
+    {
+        $friends = [];
+        $offset = 0;
+        $count = 5000;
+
+        do {
+            $response = $this->client->friends()->get($this->token, [
+                'user_id' => $userId,
+                'fields' => ['bdate', 'nickname'],
+                'count' => $count,
+                'offset' => $offset,
+            ]);
+
+            $items = $response['items'] ?? [];
+            $friends = array_merge($friends, $items);
+            $offset += count($items);
+
+            if ($offset < (int) ($response['count'] ?? 0)) {
+                usleep(350_000);
+            }
+        } while ($items !== [] && $offset < (int) ($response['count'] ?? 0));
+
+        return $friends;
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function sendDirectMessage(int $userId, string $message): mixed
+    {
+        return $this->client->messages()->send($this->token, [
+            'peer_id' => $userId,
+            'message' => $message,
+            'random_id' => random_int(1, 2_147_483_647),
+            'dont_parse_links' => 1,
+        ]);
+    }
+
     public function getClient(): VKApiClient
     {
         return $this->client;

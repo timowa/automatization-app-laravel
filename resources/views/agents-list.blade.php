@@ -12,6 +12,7 @@
                 <tr>
                     <th class="px-4 py-2 text-left">Телефон</th>
                     <th class="px-4 py-2 text-left">ФИО</th>
+                    <th class="px-4 py-2 text-left">Поздравления</th>
                     <th class="px-4 py-2 text-center">Токен</th>
                     <th class="px-4 py-2 text-center">Активность</th>
                     <th class="px-4 py-2 text-left">VK ID</th>
@@ -38,12 +39,26 @@
                     @php
                         $vkUser = $vkUsers[$agent->id] ?? null;
                         $hasVk = $vkUser instanceof \App\Models\VkUser && $vkUser->exists();
+                        $wishHappyBirthday = (bool) ($settings[$agent->id]->wish_happy_birthday ?? false);
                     @endphp
-                    <tr>
+                    <tr
+                        class="cursor-pointer hover:bg-gray-50"
+                        data-agent-id="{{ $agent->id }}"
+                        data-agent-name="{{ $agent->name }}"
+                        data-agent-phone="{{ $agent->phone }}"
+                        data-wish-birthday="{{ $wishHappyBirthday ? '1' : '0' }}"
+                    >
                         <td class="px-4 py-2">
                             <a href="/agents/edit/{{ $agent->id }}" class="font-bold">{{ $agent->phone }}</a>
                         </td>
                         <td class="px-4 py-2">{{ $agent->name }}</td>
+                        <td class="px-4 py-2 whitespace-nowrap" data-birthday-status>
+                            @if ($wishHappyBirthday)
+                                <span class="inline-block px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">Вкл</span>
+                            @else
+                                <span class="inline-block px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-700 rounded">Выкл</span>
+                            @endif
+                        </td>
                         <td class="px-4 py-2 text-center">
                             @if ($hasVk && $vkUser->is_token_available)
                                 <span class="text-green-600" title="Токен активен">&#10003;</span>
@@ -128,4 +143,178 @@
             </tbody>
         </table>
     </div>
+
+    <div
+        id="agent-settings-offcanvas"
+        class="fixed inset-0 z-50 hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-hidden="true"
+        aria-labelledby="agent-settings-title"
+        data-csrf="{{ csrf_token() }}"
+    >
+        <div data-offcanvas-backdrop class="absolute inset-0 bg-black/40 opacity-0 transition-opacity duration-300"></div>
+        <div data-offcanvas-panel class="absolute inset-y-0 right-0 flex w-full max-w-md translate-x-full flex-col bg-white shadow-xl transition-transform duration-300">
+            <div class="flex items-start justify-between border-b px-6 py-4">
+                <div>
+                    <p class="text-sm text-gray-500">Настройки агента</p>
+                    <h2 id="agent-settings-title" class="text-lg font-bold"></h2>
+                    <p data-agent-phone class="text-sm text-gray-600"></p>
+                </div>
+                <button type="button" data-offcanvas-close class="text-2xl leading-none text-gray-500 hover:text-gray-800" aria-label="Закрыть">&times;</button>
+            </div>
+            <form id="agent-settings-form" method="POST" class="flex flex-1 flex-col px-6 py-5">
+                <label class="inline-flex items-center gap-2">
+                    <input type="checkbox" name="wish_happy_birthday" value="1" class="rounded border-gray-300">
+                    <span class="text-sm font-medium">Автоматически поздравлять друзей с днём рождения</span>
+                </label>
+                <p data-settings-feedback class="mt-4 min-h-5 text-sm" role="status"></p>
+                <div class="mt-auto pt-6">
+                    <button type="submit" class="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700 disabled:opacity-60">Сохранить</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
+
+@push('scripts')
+    <script>
+        (function () {
+            const root = document.getElementById('agent-settings-offcanvas');
+            const backdrop = root.querySelector('[data-offcanvas-backdrop]');
+            const panel = root.querySelector('[data-offcanvas-panel]');
+            const title = document.getElementById('agent-settings-title');
+            const phone = root.querySelector('[data-agent-phone]');
+            const form = document.getElementById('agent-settings-form');
+            const checkbox = form.querySelector('input[name="wish_happy_birthday"]');
+            const feedback = root.querySelector('[data-settings-feedback]');
+            const submitButton = form.querySelector('button[type="submit"]');
+            const csrf = root.dataset.csrf;
+            let currentRow = null;
+            let hideTimer = null;
+
+            function birthdayBadge(enabled) {
+                if (enabled) {
+                    return '<span class="inline-block px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">Вкл</span>';
+                }
+
+                return '<span class="inline-block px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-700 rounded">Выкл</span>';
+            }
+
+            function openOffcanvas(row) {
+                currentRow = row;
+                title.textContent = row.dataset.agentName || '';
+                phone.textContent = row.dataset.agentPhone || '';
+                checkbox.checked = row.dataset.wishBirthday === '1';
+                form.action = '/agents/settings/' + row.dataset.agentId;
+                feedback.textContent = '';
+                feedback.className = 'mt-4 min-h-5 text-sm';
+
+                window.clearTimeout(hideTimer);
+                root.classList.remove('hidden');
+                root.setAttribute('aria-hidden', 'false');
+                requestAnimationFrame(function () {
+                    backdrop.classList.remove('opacity-0');
+                    backdrop.classList.add('opacity-100');
+                    panel.classList.remove('translate-x-full');
+                });
+                checkbox.focus();
+            }
+
+            function closeOffcanvas() {
+                backdrop.classList.add('opacity-0');
+                backdrop.classList.remove('opacity-100');
+                panel.classList.add('translate-x-full');
+                window.clearTimeout(hideTimer);
+                hideTimer = window.setTimeout(function () {
+                    root.classList.add('hidden');
+                    root.setAttribute('aria-hidden', 'true');
+                }, 300);
+            }
+
+            document.querySelector('table')?.addEventListener('click', function (event) {
+                if (event.target.closest('a, button, input, label, form')) {
+                    return;
+                }
+
+                const row = event.target.closest('tr[data-agent-id]');
+                if (!row) {
+                    return;
+                }
+
+                openOffcanvas(row);
+            });
+
+            root.querySelector('[data-offcanvas-close]').addEventListener('click', closeOffcanvas);
+            backdrop.addEventListener('click', closeOffcanvas);
+
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape' && !root.classList.contains('hidden')) {
+                    closeOffcanvas();
+                }
+            });
+
+            form.addEventListener('submit', function (event) {
+                event.preventDefault();
+                if (!currentRow) {
+                    return;
+                }
+
+                const enabled = checkbox.checked;
+                const formData = new FormData();
+                formData.append('_token', csrf);
+                formData.append('wish_happy_birthday', enabled ? '1' : '0');
+
+                submitButton.disabled = true;
+                feedback.textContent = '';
+                feedback.className = 'mt-4 min-h-5 text-sm';
+
+                fetch(form.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                    },
+                })
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, data: data };
+                    });
+                })
+                .then(function (result) {
+                    const data = result.data || {};
+                    if (!result.ok || !data.success) {
+                        let messages = data.messages || [];
+                        if (!messages.length && data.errors) {
+                            messages = Object.values(data.errors).flat();
+                        }
+                        if (!messages.length && data.message) {
+                            messages = [data.message];
+                        }
+                        feedback.textContent = messages.join('\n') || 'Не удалось сохранить настройки';
+                        feedback.classList.add('text-red-600');
+                        return;
+                    }
+
+                    const saved = Boolean(data.wish_happy_birthday);
+                    currentRow.dataset.wishBirthday = saved ? '1' : '0';
+                    checkbox.checked = saved;
+                    const statusCell = currentRow.querySelector('[data-birthday-status]');
+                    if (statusCell) {
+                        statusCell.innerHTML = birthdayBadge(saved);
+                    }
+                    feedback.textContent = (data.messages && data.messages[0]) || 'Настройки сохранены';
+                    feedback.classList.add('text-green-700');
+                })
+                .catch(function () {
+                    feedback.textContent = 'Ошибка запроса';
+                    feedback.classList.add('text-red-600');
+                })
+                .finally(function () {
+                    submitButton.disabled = false;
+                });
+            });
+        })();
+    </script>
+@endpush

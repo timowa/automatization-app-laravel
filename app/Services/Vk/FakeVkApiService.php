@@ -14,6 +14,7 @@ class FakeVkApiService extends VkApiService
     public string $failWith = VKApiException::class;
     public ?string $failMessage = 'VK API error';
     public array $storiesPostResponse = ['count' => 1];
+    public array $friendsResponse = [];
 
     public function setFailNext(string $exceptionClass, string $message = 'VK API error'): void
     {
@@ -102,6 +103,26 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('likePost');
 
         return ['likes' => fake()->numberBetween(1, 100)];
+    }
+
+    public function getFriends(int $userId): array
+    {
+        $this->calls[] = ['method' => 'getFriends', 'user_id' => $userId];
+        $this->maybeFail('getFriends');
+
+        return $this->friendsResponse;
+    }
+
+    public function sendDirectMessage(int $userId, string $message): array
+    {
+        $this->calls[] = [
+            'method' => 'sendDirectMessage',
+            'user_id' => $userId,
+            'message' => $message,
+        ];
+        $this->maybeFail('sendDirectMessage');
+
+        return ['message_id' => fake()->unique()->numberBetween(1, 1_000_000)];
     }
 
     public function getGroupsWithMarketForUser(int $userId): array

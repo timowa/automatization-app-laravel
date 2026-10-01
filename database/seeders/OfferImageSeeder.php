@@ -8,13 +8,14 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 
-class VkGroupSeeder extends Seeder
+class OfferImageSeeder extends Seeder
 {
     public function run(): void
     {
         $sql = File::get(database_path('seeders/_seed_inserts.sql'));
 
-        preg_match('/INSERT INTO `vk_groups` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
+        preg_match('/INSERT INTO `offer_images` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
+
         if (! empty($matches[0])) {
             DB::unprepared($matches[0]);
         }

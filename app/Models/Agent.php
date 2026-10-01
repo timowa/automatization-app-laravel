@@ -30,6 +30,16 @@ class Agent extends Model
         return $this->hasOne(VkUser::class, 'agent_id', 'id');
     }
 
+    public function setting(): HasOne
+    {
+        return $this->hasOne(Setting::class, 'agent_id', 'id');
+    }
+
+    public function vkFriends(): HasMany
+    {
+        return $this->hasMany(AgentVkFriend::class, 'agent_id', 'id');
+    }
+
     public function offers(): HasMany
     {
         return $this->hasMany(Offer::class, 'agent_id', 'id');

@@ -15,10 +15,8 @@ class VkUserSeeder extends Seeder
         $sql = File::get(database_path('seeders/_seed_inserts.sql'));
 
         preg_match('/INSERT INTO `vk_users` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
-        if (!empty($matches[0])) {
+        if (! empty($matches[0])) {
             DB::unprepared($matches[0]);
         }
-
-        DB::statement('ALTER TABLE `vk_users` AUTO_INCREMENT = 59');
     }
 }

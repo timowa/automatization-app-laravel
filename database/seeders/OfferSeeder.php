@@ -15,10 +15,8 @@ class OfferSeeder extends Seeder
         $sql = File::get(database_path('seeders/_seed_inserts.sql'));
 
         preg_match('/INSERT INTO `offers` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
-        if (!empty($matches[0])) {
+        if (! empty($matches[0])) {
             DB::unprepared($matches[0]);
         }
-
-        DB::statement('ALTER TABLE `offers` AUTO_INCREMENT = 3');
     }
 }

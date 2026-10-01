@@ -15,10 +15,8 @@ class AgentSeeder extends Seeder
         $sql = File::get(database_path('seeders/_seed_inserts.sql'));
 
         preg_match('/INSERT INTO `agents` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
-        if (!empty($matches[0])) {
+        if (! empty($matches[0])) {
             DB::unprepared($matches[0]);
         }
-
-        DB::statement('ALTER TABLE `agents` AUTO_INCREMENT = 59');
     }
 }

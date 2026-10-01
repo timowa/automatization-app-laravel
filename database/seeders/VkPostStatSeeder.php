@@ -15,10 +15,8 @@ class VkPostStatSeeder extends Seeder
         $sql = File::get(database_path('seeders/_seed_inserts.sql'));
 
         preg_match('/INSERT INTO `vk_post_stats` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
-        if (!empty($matches[0])) {
+        if (! empty($matches[0])) {
             DB::unprepared($matches[0]);
         }
-
-        DB::statement('ALTER TABLE `vk_post_stats` AUTO_INCREMENT = 9');
     }
 }

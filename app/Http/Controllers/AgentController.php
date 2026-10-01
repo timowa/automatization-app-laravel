@@ -7,10 +7,13 @@ namespace App\Http\Controllers;
 use App\Actions\Vk\SyncVkUserAction;
 use App\Http\Requests\StoreAgentRequest;
 use App\Http\Requests\UpdateAgentRequest;
+use App\Http\Requests\UpdateAgentSettingsRequest;
 use App\Models\Agent;
+use App\Models\Setting;
 use App\Models\VkUser;
 use App\Scenarios\ScenarioFactory;
 use App\Services\Vk\VkApiService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -38,7 +41,9 @@ class AgentController extends Controller
             ->get()
             ->keyBy('agent_id');
 
-        return view('agents-list', compact('agents', 'vkUsers', 'stats'));
+        $settings = Setting::all()->keyBy('agent_id');
+
+        return view('agents-list', compact('agents', 'vkUsers', 'stats', 'settings'));
     }
 
     public function create()
@@ -56,6 +61,11 @@ class AgentController extends Controller
         $agent = Agent::create([
             'name' => $request->input('name'),
             'phone' => $phone,
+        ]);
+
+        Setting::create([
+            'agent_id' => $agent->id,
+            'wish_happy_birthday' => false,
         ]);
 
         Log::channel('job')->info('Агент создан', ['agent_id' => $agent->id, 'name' => $agent->name]);
@@ -123,6 +133,29 @@ class AgentController extends Controller
             ->toArray();
 
         return view('agent-form', compact('agent', 'vkUser', 'statsByOffer', 'scenarioOrder'));
+    }
+
+    public function updateSettings(UpdateAgentSettingsRequest $request, int $id): JsonResponse
+    {
+        $agent = Agent::findOrFail($id);
+        $wishHappyBirthday = $request->boolean('wish_happy_birthday');
+
+        Setting::updateOrCreate(
+            ['agent_id' => $agent->id],
+            ['wish_happy_birthday' => $wishHappyBirthday]
+        );
+
+        Log::channel('job')->info('Настройки агента обновлены', [
+            'agent_id' => $id,
+            'wish_happy_birthday' => $wishHappyBirthday,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'messages' => ['Настройки сохранены'],
+            'redirect' => null,
+            'wish_happy_birthday' => $wishHappyBirthday,
+        ]);
     }
 
     public function save(UpdateAgentRequest $request, int $id)
