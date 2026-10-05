@@ -12,11 +12,11 @@ class VkPostStatSeeder extends Seeder
 {
     public function run(): void
     {
-        $sql = File::get(database_path('seeders/_seed_inserts.sql'));
+        $sql = File::get(database_path('seeders/prod.sql'));
 
-        preg_match('/INSERT INTO `vk_post_stats` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
-        if (! empty($matches[0])) {
-            DB::unprepared($matches[0]);
+        preg_match_all('/INSERT INTO `vk_post_stats` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
+        foreach ($matches[0] as $statement) {
+            DB::unprepared($statement);
         }
     }
 }

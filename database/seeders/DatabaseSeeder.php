@@ -12,10 +12,15 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             AgentSeeder::class,
+            SettingSeeder::class,
             OfferSeeder::class,
             OfferImageSeeder::class,
             VkUserSeeder::class,
             VkGroupSeeder::class,
+            PublicationSeeder::class,
+            PublicationTaskSeeder::class,
+            VkLoopStorySeeder::class,
+            VkPostSeeder::class,
             VkPostStatSeeder::class,
         ]);
     }
