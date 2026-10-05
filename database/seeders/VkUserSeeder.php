@@ -12,7 +12,7 @@ class VkUserSeeder extends Seeder
 {
     public function run(): void
     {
-        $sql = File::get(database_path('seeders/_seed_inserts.sql'));
+        $sql = File::get(database_path('seeders/prod.sql'));
 
         preg_match('/INSERT INTO `vk_users` \([^)]+\) VALUES[\s\S]*?;/', $sql, $matches);
         if (! empty($matches[0])) {

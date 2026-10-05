@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Actions\GetAgentPublicationStatsAction;
 use App\Actions\Vk\SyncVkUserAction;
 use App\Http\Requests\StoreAgentRequest;
 use App\Http\Requests\UpdateAgentRequest;
@@ -11,7 +12,6 @@ use App\Http\Requests\UpdateAgentSettingsRequest;
 use App\Models\Agent;
 use App\Models\Setting;
 use App\Models\VkUser;
-use App\Scenarios\ScenarioFactory;
 use App\Services\Vk\VkApiService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -73,64 +73,13 @@ class AgentController extends Controller
         viewJson(true, ['Агент создан'], '/agents/edit/'.$agent->id);
     }
 
-    public function edit(int $id)
+    public function edit(int $id, GetAgentPublicationStatsAction $publicationStats)
     {
         $agent = Agent::findOrFail($id);
         $vkUser = $agent->vkUser ?? new VkUser;
-
-        // Статистика по офферам и сценариям — берём последний снимок для каждого поста
-        $latestStats = DB::table('vk_post_stats as ps')
-            ->join('vk_posts as vp', 'vp.id', '=', 'ps.vk_post_id')
-            ->join('publication_tasks as pt', 'pt.id', '=', 'vp.task_id')
-            ->join('publications as p', 'p.id', '=', 'pt.publication_id')
-            ->join('offers as o', 'o.id', '=', 'vp.offer_id')
-            ->where('o.agent_id', $id)
-            ->where('ps.datetime', function ($query) {
-                $query->selectRaw('MAX(ps2.datetime)')
-                    ->from('vk_post_stats as ps2')
-                    ->whereColumn('ps2.vk_post_id', 'ps.vk_post_id');
-            })
-            ->select(
-                'o.code',
-                'p.scenario',
-                'ps.views',
-                'ps.reposts',
-                'ps.likes',
-                'ps.comments',
-            )
-            ->get();
-
-        // Группировать по офферу
-        $statsByOffer = [];
-        foreach ($latestStats as $row) {
-            $code = $row->code;
-            if (! isset($statsByOffer[$code])) {
-                $statsByOffer[$code] = [
-                    'total' => ['views' => 0, 'reposts' => 0, 'likes' => 0, 'comments' => 0],
-                    'scenarios' => [],
-                ];
-            }
-            $statsByOffer[$code]['total']['views'] += $row->views;
-            $statsByOffer[$code]['total']['reposts'] += $row->reposts;
-            $statsByOffer[$code]['total']['likes'] += $row->likes;
-            $statsByOffer[$code]['total']['comments'] += $row->comments;
-
-            $scenario = $row->scenario;
-            if (! isset($statsByOffer[$code]['scenarios'][$scenario])) {
-                $statsByOffer[$code]['scenarios'][$scenario] = [
-                    'views' => 0, 'reposts' => 0, 'likes' => 0, 'comments' => 0,
-                ];
-            }
-            $statsByOffer[$code]['scenarios'][$scenario]['views'] += $row->views;
-            $statsByOffer[$code]['scenarios'][$scenario]['reposts'] += $row->reposts;
-            $statsByOffer[$code]['scenarios'][$scenario]['likes'] += $row->likes;
-            $statsByOffer[$code]['scenarios'][$scenario]['comments'] += $row->comments;
-        }
-
-        // Порядок сценариев из ScenarioFactory
-        $scenarioOrder = collect(app(ScenarioFactory::class)->list())
-            ->map(fn ($class) => (new $class)->type()->value)
-            ->toArray();
+        $stats = $publicationStats->execute($agent->id);
+        $statsByOffer = $stats['statsByOffer'];
+        $scenarioOrder = $stats['scenarioOrder'];
 
         return view('agent-form', compact('agent', 'vkUser', 'statsByOffer', 'scenarioOrder'));
     }
