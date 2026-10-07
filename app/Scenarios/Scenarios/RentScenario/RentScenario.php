@@ -6,7 +6,6 @@ use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
 use App\Scenarios\Rules\ActiveStatusRule;
 use App\Scenarios\Rules\DealIsRentOutRule;
-use App\Scenarios\Rules\HasDepositAndCommissionRule;
 use App\Scenarios\Rules\NewOfferOrAnnouncementRule;
 use App\Scenarios\Rules\OfferHasPrice;
 use App\Scenarios\Scenario;
@@ -25,7 +24,6 @@ class RentScenario extends Scenario
             ActiveStatusRule::class,
             OfferHasPrice::class,
             DealIsRentOutRule::class,
-            HasDepositAndCommissionRule::class,
         ];
     }
 

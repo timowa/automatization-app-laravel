@@ -102,10 +102,11 @@
 | Case | Value | Label |
 |---|---|---|
 | `APARTMENT` | 1 | Квартира |
-| `HOUSE` | 2 | Дом на земле |
+| `HOUSE` | 2 | Дом на земле (алиас: жилье на земле) |
 | `ROOM` | 3 | Комната |
 | `NEW_BUILDING` | 4 | Новостройка |
 | `COMMERCIAL` | 5 | Коммерческий объект |
+| `LAND` | 6 | Участок |
 
 ### City
 
@@ -118,8 +119,10 @@
 | `ABAKAN` | 1 | Абакан | abakan |
 | `KYZYL` | 2 | Кызыл | kyzyl |
 | `CHIKAGO` | 3 | Черногорск | chernogorsk |
+| `UST_ABAKAN` | 4 | Усть-Абакан | ust-abakan |
 
 > Case `CHIKAGO` соответствует городу Черногорск (alias `chernogorsk`).
+> `acceptedCities()` связывает Абакан, Черногорск и Усть-Абакан в одну группу для репостов/market.
 
 ## VK-перечисления
 

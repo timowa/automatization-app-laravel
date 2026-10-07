@@ -101,18 +101,12 @@ class VkJobsTest extends TestCase
 
     public function test_city_accepted_cities_mapping(): void
     {
-        $this->assertSame(
-            [City::ABAKAN, City::CHIKAGO],
-            City::ABAKAN->acceptedCities()
-        );
-        $this->assertSame(
-            [City::KYZYL],
-            City::KYZYL->acceptedCities()
-        );
-        $this->assertSame(
-            [City::ABAKAN, City::CHIKAGO],
-            City::CHIKAGO->acceptedCities()
-        );
+        $abakanRegion = [City::ABAKAN, City::CHIKAGO, City::UST_ABAKAN];
+
+        $this->assertSame($abakanRegion, City::ABAKAN->acceptedCities());
+        $this->assertSame($abakanRegion, City::CHIKAGO->acceptedCities());
+        $this->assertSame($abakanRegion, City::UST_ABAKAN->acceptedCities());
+        $this->assertSame([City::KYZYL], City::KYZYL->acceptedCities());
     }
 
     public function test_create_vk_post_job_success(): void

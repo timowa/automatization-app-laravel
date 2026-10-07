@@ -151,6 +151,8 @@ ScenarioResolver → Scenario
 Правила:
 - `NewOfferOrAnnouncementRule` — первый оффер или предыдущая публикация со сценарием ANNOUNCEMENT.
 - `ActiveStatusRule` — статус ACTIVE.
+- `OfferHasPrice` — цена больше 0.
+- `DealIsSaleRule` — тип сделки `SALE` ("продажа").
 
 Задачи: `VK_POST`, `VK_REPOST`, `VK_LOOP_STORY`, `VK_COMMENT`, `VK_CREATE_PRODUCT`.
 
@@ -169,7 +171,6 @@ ScenarioResolver → Scenario
 - `ActiveStatusRule` — статус ACTIVE.
 - `OfferHasPrice` — цена больше 0.
 - `DealIsRentOutRule` — тип сделки `RENT_OUT` ("сдача").
-- `HasDepositAndCommissionRule` — заполнены `deposit` и `commission`.
 
 Задачи: `VK_POST`, `VK_REPOST`, `VK_LOOP_STORY`, `VK_COMMENT`, `VK_CREATE_PRODUCT`.
 

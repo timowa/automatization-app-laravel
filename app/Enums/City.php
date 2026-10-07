@@ -13,6 +13,7 @@ enum City: int
     case ABAKAN = 1;
     case KYZYL = 2;
     case CHIKAGO = 3;
+    case UST_ABAKAN = 4;
 
     public function label(): string
     {
@@ -20,6 +21,7 @@ enum City: int
             self::ABAKAN => 'Абакан',
             self::KYZYL => 'Кызыл',
             self::CHIKAGO => 'Черногорск',
+            self::UST_ABAKAN => 'Усть-Абакан',
         };
     }
 
@@ -29,6 +31,7 @@ enum City: int
             self::ABAKAN => 'abakan',
             self::KYZYL => 'kyzyl',
             self::CHIKAGO => 'chernogorsk',
+            self::UST_ABAKAN => 'ust-abakan',
         };
     }
 
@@ -40,7 +43,11 @@ enum City: int
     public function acceptedCities(): array
     {
         return match ($this) {
-            self::ABAKAN, self::CHIKAGO => [self::ABAKAN, self::CHIKAGO],
+            self::ABAKAN, self::CHIKAGO, self::UST_ABAKAN => [
+                self::ABAKAN,
+                self::CHIKAGO,
+                self::UST_ABAKAN,
+            ],
             self::KYZYL => [self::KYZYL],
         };
     }

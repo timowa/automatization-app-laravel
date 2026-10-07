@@ -42,6 +42,7 @@ class ReceiveOfferWebhookAction
                 ->where('price', $offerData->price)
                 ->where('stage', $offerData->stage)
                 ->where('status', $offerData->status->value)
+                ->where('agent_id', $offerData->agentId)
                 ->first();
 
             if ($existingOffer) {

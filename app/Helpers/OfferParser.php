@@ -42,10 +42,30 @@ final class OfferParser
             }
         }
 
-        $city = City::tryFromLabel($data['location']['city'] ?? null) ?? null;
-        $deal = Deal::tryFromLabel($data['deal'] ?? null) ?? null;
-        $category = Category::tryFromLabel($data['category'] ?? null) ?? null;
-        $status = OfferStatus::tryFromLabel($data['status']);
+        $cityLabel = $data['location']['city'] ?? null;
+        $dealLabel = $data['deal'] ?? null;
+        $categoryLabel = $data['category'] ?? null;
+        $statusLabel = $data['status'] ?? null;
+
+        $city = City::tryFromLabel($cityLabel);
+        if ($city === null) {
+            throw new OfferParserException('Неизвестный город: ' . ($cityLabel ?? 'null'));
+        }
+
+        $deal = Deal::tryFromLabel($dealLabel);
+        if ($deal === null) {
+            throw new OfferParserException('Неизвестный тип сделки: ' . ($dealLabel ?? 'null'));
+        }
+
+        $category = Category::tryFromLabel($categoryLabel);
+        if ($category === null) {
+            throw new OfferParserException('Неизвестная категория: ' . ($categoryLabel ?? 'null'));
+        }
+
+        $status = OfferStatus::tryFromLabel($statusLabel);
+        if ($status === null) {
+            throw new OfferParserException('Неизвестный статус: ' . ($statusLabel ?? 'null'));
+        }
 
         return new \App\DTO\OfferData(
             (int) $data['id'],

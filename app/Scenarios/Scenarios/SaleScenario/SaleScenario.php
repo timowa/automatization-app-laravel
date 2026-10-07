@@ -5,6 +5,7 @@ namespace App\Scenarios\Scenarios\SaleScenario;
 use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
 use App\Scenarios\Rules\ActiveStatusRule;
+use App\Scenarios\Rules\DealIsSaleRule;
 use App\Scenarios\Rules\NewOfferOrAnnouncementRule;
 use App\Scenarios\Rules\OfferHasPrice;
 use App\Scenarios\Scenario;
@@ -22,6 +23,7 @@ class SaleScenario extends Scenario
             NewOfferOrAnnouncementRule::class,
             ActiveStatusRule::class,
             OfferHasPrice::class,
+            DealIsSaleRule::class,
         ];
     }
 

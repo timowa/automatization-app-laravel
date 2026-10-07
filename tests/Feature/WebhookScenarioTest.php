@@ -7,6 +7,17 @@ use App\Enums\OfferStatus;
 use App\Enums\PublicationTaskStatus;
 use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
+use App\Jobs\ArchiveVkProductJob;
+use App\Jobs\CreateVkCommentJob;
+use App\Jobs\CreateVkLikeJob;
+use App\Jobs\CreateVkLoopStoryJob;
+use App\Jobs\CreateVkPostJob;
+use App\Jobs\CreateVkProductJob;
+use App\Jobs\CreateVkRepostJob;
+use App\Jobs\CreateVkStoriesJob;
+use App\Jobs\EditVkProductJob;
+use App\Jobs\EndVkLoopStoryJob;
+use App\Jobs\UploadVkImagesJob;
 use App\Models\Agent;
 use App\Models\Offer;
 use App\Models\OfferImage;
@@ -24,7 +35,20 @@ class WebhookScenarioTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Queue::fake();
+        // Фейкаем только VK-джобы: ProcessOfferListener (ShouldQueue) должен выполниться.
+        Queue::fake([
+            UploadVkImagesJob::class,
+            CreateVkPostJob::class,
+            CreateVkRepostJob::class,
+            CreateVkStoriesJob::class,
+            CreateVkLoopStoryJob::class,
+            EndVkLoopStoryJob::class,
+            CreateVkCommentJob::class,
+            CreateVkLikeJob::class,
+            CreateVkProductJob::class,
+            EditVkProductJob::class,
+            ArchiveVkProductJob::class,
+        ]);
     }
 
     private function payload(array $overrides = []): array
@@ -87,7 +111,7 @@ class WebhookScenarioTest extends TestCase
         $this->assertDatabaseHas('publication_tasks', [
             'publication_id' => $publication->id,
             'type' => PublicationTaskType::VK_UPLOAD_IMAGES->value,
-            'status' => PublicationTaskStatus::PENDING->value,
+            'status' => PublicationTaskStatus::QUEUED->value,
         ]);
         $this->assertDatabaseHas('publication_tasks', [
             'publication_id' => $publication->id,
@@ -111,7 +135,8 @@ class WebhookScenarioTest extends TestCase
 
         $types = PublicationTask::where('publication_id', $publication->id)
             ->pluck('type')
-            ->toArray();
+            ->map(fn (PublicationTaskType $type) => $type->value)
+            ->all();
 
         $this->assertContains(PublicationTaskType::VK_UPLOAD_IMAGES->value, $types);
         $this->assertContains(PublicationTaskType::VK_POST->value, $types);
@@ -139,7 +164,8 @@ class WebhookScenarioTest extends TestCase
 
         $types = PublicationTask::where('publication_id', $publication->id)
             ->pluck('type')
-            ->toArray();
+            ->map(fn (PublicationTaskType $type) => $type->value)
+            ->all();
 
         $this->assertContains(PublicationTaskType::VK_UPLOAD_IMAGES->value, $types);
         $this->assertContains(PublicationTaskType::VK_POST->value, $types);
@@ -227,7 +253,7 @@ class WebhookScenarioTest extends TestCase
         $this->assertNull($publication);
     }
 
-    public function test_rent_offer_without_deposit_does_not_trigger_rent_scenario(): void
+    public function test_rent_offer_without_deposit_triggers_rent_scenario(): void
     {
         Agent::factory()->create(['phone' => '79953742476']);
 
@@ -243,7 +269,58 @@ class WebhookScenarioTest extends TestCase
         $publication = Publication::where('offer_id', $offer->id)->first();
 
         $this->assertNotNull($offer);
-        $this->assertNotSame(ScenarioType::RENT->value, $publication?->scenario?->value);
+        $this->assertNotNull($publication);
+        $this->assertSame(ScenarioType::RENT->value, $publication->scenario->value);
+        $this->assertNotSame(ScenarioType::SALE->value, $publication->scenario->value);
+    }
+
+    public function test_house_alias_and_ust_abakan_city_are_parsed(): void
+    {
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'category' => 'жилье на земле',
+            'location' => [
+                'city' => 'Усть-Абакан',
+                'address' => 'ул. Орджоникидзе, 67',
+            ],
+            'price' => 350000,
+        ]));
+
+        $response->assertOk();
+        $this->assertDatabaseCount('offers', 1);
+
+        $offer = Offer::first();
+        $this->assertNotNull($offer);
+        $this->assertSame(\App\Enums\Category::HOUSE, $offer->category());
+        $this->assertSame(\App\Enums\City::UST_ABAKAN, $offer->city());
+    }
+
+    public function test_land_category_is_parsed(): void
+    {
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'category' => 'участок',
+            'price' => 350000,
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::first();
+        $this->assertNotNull($offer);
+        $this->assertSame(\App\Enums\Category::LAND, $offer->category());
+    }
+
+    public function test_unknown_category_skips_offer_without_sql_error(): void
+    {
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'category' => 'неизвестная-категория',
+        ]));
+
+        $response->assertOk();
+        $this->assertDatabaseCount('offers', 0);
     }
 
     public function test_price_decrease_triggers_price_changed_scenario(): void
@@ -300,6 +377,7 @@ class WebhookScenarioTest extends TestCase
         Publication::factory()->forOffer($prevOffer)->withScenario(ScenarioType::SALE)->create();
 
         $response = $this->postJson('/offer', $this->payload([
+            'price' => 1_000_000,
             'agent' => ['name' => 'Second Agent', 'phone' => '+79999999999'],
         ]));
 
@@ -323,13 +401,14 @@ class WebhookScenarioTest extends TestCase
         ]);
         Publication::factory()->forOffer($prevOffer)->withScenario(ScenarioType::SALE)->create();
 
-        $this->postJson('/offer', $this->payload(['status' => 'архив']));
+        $this->postJson('/offer', $this->payload(['status' => 'архив', 'price' => 1_000_000]));
         $firstArchive = Offer::latest('id')->first();
         $firstPublication = Publication::where('offer_id', $firstArchive->id)->first();
         $this->assertNotNull($firstPublication);
         $this->assertSame(ScenarioType::SOLD->value, $firstPublication->scenario->value);
 
-        $this->postJson('/offer', $this->payload(['status' => 'архив']));
+        // Другая цена, чтобы пройти анти-дубликат вебхука и создать вторую archive-запись.
+        $this->postJson('/offer', $this->payload(['status' => 'архив', 'price' => 999_000]));
         $secondArchive = Offer::latest('id')->first();
         $secondPublication = Publication::where('offer_id', $secondArchive->id)->first();
         $this->assertNotNull($secondPublication);
