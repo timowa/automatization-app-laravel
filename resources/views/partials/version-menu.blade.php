@@ -3,7 +3,12 @@
     /** @var list<array{version: string, date: string, changes: list<string>}> $recentReleases */
     /** @var bool $showVersionNewBadge */
 @endphp
-<div class="relative" id="product-version-menu">
+<div
+    class="relative"
+    id="product-version-menu"
+    data-seen-url="{{ route('changelog.seen') }}"
+    data-csrf="{{ csrf_token() }}"
+>
     <button
         type="button"
         id="product-version-toggle"
@@ -14,10 +19,7 @@
     >
         <span>{{ $productVersion }}</span>
         @if (!empty($showVersionNewBadge))
-            <span
-                data-version-new-badge
-                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white leading-none"
-            >new</span>
+            <span id="version-new-badge" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white leading-none">new</span>
         @endif
     </button>
     <div

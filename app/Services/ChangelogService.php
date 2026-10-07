@@ -17,21 +17,17 @@ class ChangelogService
     }
 
     /**
-     * Показать бейдж New, если пользователь ещё не видел текущую версию в этой сессии.
-     * После первого показа версия помечается просмотренной — на следующих запросах бейджа нет.
+     * Бейдж New, пока пользователь явно не посмотрел changelog:
+     * клик по версии в шапке или открытие /changelog.
      */
-    public function consumeNewBadge(): bool
+    public function shouldShowNewBadge(): bool
     {
-        $current = $this->current();
-        $seen = session(self::SESSION_SEEN_VERSION_KEY);
+        return session(self::SESSION_SEEN_VERSION_KEY) !== $this->current();
+    }
 
-        $showNew = $seen !== $current;
-
-        if ($showNew) {
-            session([self::SESSION_SEEN_VERSION_KEY => $current]);
-        }
-
-        return $showNew;
+    public function markCurrentVersionSeen(): void
+    {
+        session([self::SESSION_SEEN_VERSION_KEY => $this->current()]);
     }
 
     /**

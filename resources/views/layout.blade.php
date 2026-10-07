@@ -41,6 +41,37 @@
                 const dropdown = document.getElementById('product-version-dropdown');
                 if (!toggle || !dropdown) return;
 
+                let versionMarkedSeen = false;
+
+                const markVersionSeen = function () {
+                    if (versionMarkedSeen) return;
+                    versionMarkedSeen = true;
+
+                    const badge = document.getElementById('version-new-badge');
+                    if (badge) {
+                        badge.remove();
+                    }
+
+                    const url = root.getAttribute('data-seen-url');
+                    const csrf = root.getAttribute('data-csrf');
+                    if (!url || !csrf) return;
+
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                            'Content-Type': 'application/json',
+                        },
+                        body: '{}',
+                        credentials: 'same-origin',
+                    }).catch(function (err) {
+                        console.error(err);
+                        versionMarkedSeen = false;
+                    });
+                };
+
                 const open = () => {
                     dropdown.classList.remove('hidden');
                     toggle.setAttribute('aria-expanded', 'true');
@@ -52,6 +83,7 @@
 
                 toggle.addEventListener('click', function (e) {
                     e.stopPropagation();
+                    markVersionSeen();
                     if (dropdown.classList.contains('hidden')) {
                         open();
                     } else {

@@ -31,4 +31,5 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::post('/agents/token-permissions/{id}', [AgentController::class, 'getTokenPermissions']);
     Route::get('/posts', [VkWallPostController::class, 'index']);
     Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog');
+    Route::post('/changelog/seen', [ChangelogController::class, 'markSeen'])->name('changelog.seen');
 });

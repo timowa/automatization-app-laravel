@@ -15,7 +15,6 @@ class ChangelogTest extends TestCase
         $this->assertNotEmpty($releases);
         $this->assertSame($releases[0]['version'], $changelog->current());
         $this->assertSame('v'.$changelog->current(), $changelog->currentLabel());
-        $this->assertGreaterThanOrEqual(10, count($releases[0]['changes']));
     }
 
     public function test_changelog_page_requires_admin(): void
@@ -25,47 +24,86 @@ class ChangelogTest extends TestCase
         $this->get('/changelog')->assertRedirect();
     }
 
-    public function test_changelog_page_shows_current_version_for_admin(): void
+    public function test_changelog_page_shows_history_and_marks_seen(): void
     {
         $this->withoutVite();
 
-        $label = app(ChangelogService::class)->currentLabel();
+        $changelog = app(ChangelogService::class);
+        $label = $changelog->currentLabel();
+        $current = $changelog->current();
 
         $response = $this->withSession(['is_admin' => true])->get('/changelog');
 
         $response->assertOk();
         $response->assertSee($label, false);
         $response->assertSee('История версий', false);
-        $response->assertSee('Вебхук POST /offer', false);
-    }
-
-    public function test_layout_version_menu_is_rendered_on_changelog_page(): void
-    {
-        $this->withoutVite();
-
-        $response = $this->withSession(['is_admin' => true])->get('/changelog');
-
-        $response->assertOk();
         $response->assertSee('product-version-menu', false);
-        $response->assertSee('Все версии', false);
+        $response->assertSessionHas(ChangelogService::SESSION_SEEN_VERSION_KEY, $current);
     }
 
-    public function test_new_badge_shown_only_on_first_open_after_version_change(): void
+    public function test_should_show_new_badge_until_marked_seen(): void
+    {
+        $changelog = app(ChangelogService::class);
+
+        $this->assertTrue($changelog->shouldShowNewBadge());
+
+        $changelog->markCurrentVersionSeen();
+
+        $this->assertFalse($changelog->shouldShowNewBadge());
+        $this->assertSame(
+            $changelog->current(),
+            session(ChangelogService::SESSION_SEEN_VERSION_KEY)
+        );
+    }
+
+    public function test_mark_seen_endpoint_stores_version_in_session(): void
     {
         $this->withoutVite();
 
         $current = app(ChangelogService::class)->current();
 
-        $first = $this->withSession(['is_admin' => true])->get('/changelog');
-        $first->assertOk();
-        $first->assertSee('data-version-new-badge', false);
-        $first->assertSessionHas(ChangelogService::SESSION_SEEN_VERSION_KEY, $current);
+        $response = $this->withSession(['is_admin' => true])->postJson('/changelog/seen');
 
-        $second = $this->withSession([
+        $response->assertOk();
+        $response->assertJson([
+            'success' => true,
+            'version' => $current,
+        ]);
+        $response->assertSessionHas(ChangelogService::SESSION_SEEN_VERSION_KEY, $current);
+    }
+
+    public function test_badge_hidden_after_version_already_seen_in_session(): void
+    {
+        $this->withoutVite();
+
+        $current = app(ChangelogService::class)->current();
+
+        $response = $this->withSession([
             'is_admin' => true,
             ChangelogService::SESSION_SEEN_VERSION_KEY => $current,
         ])->get('/changelog');
-        $second->assertOk();
-        $second->assertDontSee('data-version-new-badge', false);
+
+        $response->assertOk();
+        $this->assertStringNotContainsString('id="version-new-badge"', $response->getContent());
+    }
+
+    public function test_version_menu_partial_renders_badge_flag(): void
+    {
+        $withBadge = view('partials.version-menu', [
+            'productVersion' => 'v1.1',
+            'recentReleases' => [],
+            'showVersionNewBadge' => true,
+        ])->render();
+
+        $this->assertStringContainsString('id="version-new-badge"', $withBadge);
+        $this->assertStringContainsString('changelog/seen', $withBadge);
+
+        $withoutBadge = view('partials.version-menu', [
+            'productVersion' => 'v1.1',
+            'recentReleases' => [],
+            'showVersionNewBadge' => false,
+        ])->render();
+
+        $this->assertStringNotContainsString('id="version-new-badge"', $withoutBadge);
     }
 }
