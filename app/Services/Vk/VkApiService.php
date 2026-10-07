@@ -256,7 +256,7 @@ VKSCRIPT;
         do {
             $response = $this->client->friends()->get($this->token, [
                 'user_id' => $userId,
-                'fields' => ['bdate', 'nickname'],
+                'fields' => ['bdate', 'nickname', 'sex'],
                 'count' => $count,
                 'offset' => $offset,
             ]);

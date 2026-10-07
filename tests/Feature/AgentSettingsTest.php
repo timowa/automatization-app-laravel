@@ -19,6 +19,8 @@ class AgentSettingsTest extends TestCase
         Setting::create([
             'agent_id' => $enabled->id,
             'wish_happy_birthday' => true,
+            'birthday_wish_male_text' => 'Текст М',
+            'birthday_wish_female_text' => 'Текст Ж',
         ]);
 
         $disabled = Agent::factory()->create(['name' => 'Агент Выключен', 'phone' => '79990000002']);
@@ -42,8 +44,8 @@ class AgentSettingsTest extends TestCase
         $response->assertSee('data-agent-id="'.$enabled->id.'"', false);
         $response->assertSee('data-wish-birthday="1"', false);
         $response->assertSee('data-wish-birthday="0"', false);
-        $response->assertSee('Вкл');
-        $response->assertSee('Выкл');
+        $response->assertSee('data-gender-badge="male"', false);
+        $response->assertSee('data-gender-badge="female"', false);
     }
 
     public function test_birthday_setting_is_saved_without_redirect(): void
@@ -52,6 +54,8 @@ class AgentSettingsTest extends TestCase
 
         $response = $this->withSession(['is_admin' => true])->postJson('/agents/settings/'.$agent->id, [
             'wish_happy_birthday' => true,
+            'birthday_wish_male_text' => 'М',
+            'birthday_wish_female_text' => 'Ж',
         ]);
 
         $response->assertOk();
@@ -59,11 +63,15 @@ class AgentSettingsTest extends TestCase
             'success' => true,
             'redirect' => null,
             'wish_happy_birthday' => true,
+            'has_male_text' => true,
+            'has_female_text' => true,
         ]);
 
         $this->assertDatabaseHas('settings', [
             'agent_id' => $agent->id,
             'wish_happy_birthday' => 1,
+            'birthday_wish_male_text' => 'М',
+            'birthday_wish_female_text' => 'Ж',
         ]);
     }
 

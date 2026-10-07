@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Jobs;
 
+use App\Helpers\BirthdayWishEligibility;
 use App\Models\Agent;
 use App\Models\AgentVkFriend;
-use App\Services\Vk\Message\BirthdayWishTextGenerator;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -29,9 +29,9 @@ class WishHappyBirthdayJob implements ShouldQueue
         public readonly int $friendUserId
     ) {}
 
-    public function handle(VkApiService $vkApi, BirthdayWishTextGenerator $textGenerator): void
+    public function handle(VkApiService $vkApi): void
     {
-        $agent = Agent::find($this->agentId);
+        $agent = Agent::with('setting')->find($this->agentId);
         $friend = AgentVkFriend::where('agent_id', $this->agentId)
             ->where('user_id', $this->friendUserId)
             ->first();
@@ -55,10 +55,40 @@ class WishHappyBirthdayJob implements ShouldQueue
             return;
         }
 
-        if (! $agent->setting?->wish_happy_birthday) {
-            Log::channel('job')->warning('Поздравление с днём рождения отключено в настройках агента', [
+        $setting = $agent->setting;
+        if (! $setting) {
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: настройки не найдены', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
+            ]);
+
+            return;
+        }
+
+        if (BirthdayWishEligibility::wasWishedThisYear($friend->last_birthday_wish_at)) {
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: уже поздравляли в этом году', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+            ]);
+
+            return;
+        }
+
+        if (! BirthdayWishEligibility::ageInRange($friend->bdate)) {
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: возраст вне диапазона 18–70 или нет года рождения', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+            ]);
+
+            return;
+        }
+
+        $message = BirthdayWishEligibility::messageForFriend($setting, $friend->sex);
+        if ($message === null) {
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: нет подходящего текста или выключена настройка', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+                'sex' => $friend->sex,
             ]);
 
             return;
@@ -66,10 +96,10 @@ class WishHappyBirthdayJob implements ShouldQueue
 
         try {
             $vkApi->setToken($vkUser->getToken());
-            $vkApi->sendDirectMessage(
-                $this->friendUserId,
-                $textGenerator->generate($friend->first_name, $agent->name)
-            );
+            $vkApi->sendDirectMessage($this->friendUserId, $message);
+
+            $friend->last_birthday_wish_at = now()->toDateString();
+            $friend->save();
 
             Log::channel('job')->info('Поздравление с днём рождения отправлено', [
                 'agent_id' => $this->agentId,
@@ -77,27 +107,6 @@ class WishHappyBirthdayJob implements ShouldQueue
             ]);
         } catch (\Throwable $e) {
             Log::channel('job')->warning('Ошибка отправки поздравления с днём рождения', [
-                'agent_id' => $this->agentId,
-                'friend_user_id' => $this->friendUserId,
-            ]);
-            Log::channel('vk')->error($e->getMessage(), [
-                'agent_id' => $this->agentId,
-                'friend_user_id' => $this->friendUserId,
-            ]);
-
-            return;
-        }
-
-        try {
-            BirthdayDiscountJob::dispatch($this->agentId, $this->friendUserId)
-                ->delay(now()->addDay()->setTime(8, 0));
-
-            Log::channel('job')->info('Задача отправки скидки ко дню рождения создана', [
-                'agent_id' => $this->agentId,
-                'friend_user_id' => $this->friendUserId,
-            ]);
-        } catch (\Throwable $e) {
-            Log::channel('job')->warning('Ошибка создания задачи отправки скидки ко дню рождения', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);

@@ -221,12 +221,18 @@
                     @php
                         $vkUser = $vkUsers[$agent->id] ?? null;
                         $hasVk = $vkUser instanceof \App\Models\VkUser && $vkUser->exists();
-                        $wishHappyBirthday = (bool) ($settings[$agent->id]->wish_happy_birthday ?? false);
+                        $agentSetting = $settings[$agent->id] ?? null;
+                        $wishHappyBirthday = (bool) ($agentSetting->wish_happy_birthday ?? false);
+                        $maleText = (string) ($agentSetting->birthday_wish_male_text ?? '');
+                        $femaleText = (string) ($agentSetting->birthday_wish_female_text ?? '');
+                        $hasMaleText = $wishHappyBirthday && trim($maleText) !== '';
+                        $hasFemaleText = $wishHappyBirthday && trim($femaleText) !== '';
                         $agentStats = $stats[$agent->id] ?? null;
                         $tokenOrder = $hasVk ? ($vkUser->is_token_available ? 2 : 1) : 0;
                         $activityOrder = $agentStats
                             ? ((int) $agentStats->views + (int) $agentStats->reposts + (int) $agentStats->likes + (int) $agentStats->comments)
                             : -1;
+                        $birthdayOrder = ($hasMaleText ? 2 : 0) + ($hasFemaleText ? 1 : 0);
                     @endphp
                     <tr
                         class="cursor-pointer hover:bg-gray-50"
@@ -234,17 +240,18 @@
                         data-agent-name="{{ $agent->name }}"
                         data-agent-phone="{{ $agent->phone }}"
                         data-wish-birthday="{{ $wishHappyBirthday ? '1' : '0' }}"
+                        data-has-male-text="{{ $hasMaleText ? '1' : '0' }}"
+                        data-has-female-text="{{ $hasFemaleText ? '1' : '0' }}"
                     >
                         <td class="px-4 py-2" data-order="{{ $agent->phone }}">
                             <a href="/agents/edit/{{ $agent->id }}" class="font-bold">{{ $agent->phone }}</a>
                         </td>
                         <td class="px-4 py-2">{{ $agent->name }}</td>
-                        <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $wishHappyBirthday ? 1 : 0 }}" data-birthday-status>
-                            @if ($wishHappyBirthday)
-                                <span class="inline-block px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">Вкл</span>
-                            @else
-                                <span class="inline-block px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-700 rounded">Выкл</span>
-                            @endif
+                        <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $birthdayOrder }}" data-birthday-status>
+                            <span class="inline-flex gap-1">
+                                <span data-gender-badge="male" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $hasMaleText ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700' }}">М</span>
+                                <span data-gender-badge="female" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $hasFemaleText ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700' }}">Ж</span>
+                            </span>
                         </td>
                         <td class="px-4 py-2 text-center" data-order="{{ $tokenOrder }}">
                             @if ($hasVk && $vkUser->is_token_available)
@@ -353,11 +360,37 @@
                 </div>
                 <button type="button" data-offcanvas-close class="text-2xl leading-none text-gray-500 hover:text-gray-800" aria-label="Закрыть">&times;</button>
             </div>
-            <form id="agent-settings-form" method="POST" class="flex flex-1 flex-col px-6 py-5">
+            <form id="agent-settings-form" method="POST" class="flex flex-1 flex-col px-6 py-5 overflow-y-auto">
                 <label class="inline-flex items-center gap-2">
                     <input type="checkbox" name="wish_happy_birthday" value="1" class="rounded border-gray-300">
                     <span class="text-sm font-medium">Автоматически поздравлять друзей с днём рождения</span>
                 </label>
+
+                <div data-birthday-texts class="mt-5 space-y-4 hidden">
+                    <div>
+                        <label for="birthday_wish_male_text" class="block text-sm font-medium mb-1">Поздравление для мужчин</label>
+                        <textarea
+                            id="birthday_wish_male_text"
+                            name="birthday_wish_male_text"
+                            rows="6"
+                            maxlength="4096"
+                            class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                            placeholder="Текст сообщения для мужчин"
+                        ></textarea>
+                    </div>
+                    <div>
+                        <label for="birthday_wish_female_text" class="block text-sm font-medium mb-1">Поздравление для женщин</label>
+                        <textarea
+                            id="birthday_wish_female_text"
+                            name="birthday_wish_female_text"
+                            rows="6"
+                            maxlength="4096"
+                            class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                            placeholder="Текст сообщения для женщин"
+                        ></textarea>
+                    </div>
+                </div>
+
                 <p data-settings-feedback class="mt-4 min-h-5 text-sm" role="status"></p>
                 <div class="mt-auto pt-6">
                     <button type="submit" class="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700 disabled:opacity-60">Сохранить</button>
@@ -365,6 +398,8 @@
             </form>
         </div>
     </div>
+
+    <script type="application/json" id="agent-birthday-texts">@json($birthdayTextsByAgent)</script>
 @endsection
 
 @push('scripts')
@@ -571,18 +606,43 @@
             const phone = root.querySelector('[data-agent-phone]');
             const form = document.getElementById('agent-settings-form');
             const checkbox = form.querySelector('input[name="wish_happy_birthday"]');
+            const textsBlock = form.querySelector('[data-birthday-texts]');
+            const maleTextarea = form.querySelector('textarea[name="birthday_wish_male_text"]');
+            const femaleTextarea = form.querySelector('textarea[name="birthday_wish_female_text"]');
             const feedback = root.querySelector('[data-settings-feedback]');
             const submitButton = form.querySelector('button[type="submit"]');
             const csrf = root.dataset.csrf;
+            const birthdayTextsNode = document.getElementById('agent-birthday-texts');
+            let birthdayTextsByAgent = {};
+            try {
+                birthdayTextsByAgent = JSON.parse(birthdayTextsNode?.textContent || '{}');
+            } catch (error) {
+                console.error('Agents table: failed to parse birthday texts', error);
+            }
             let currentRow = null;
             let hideTimer = null;
 
-            function birthdayBadge(enabled) {
-                if (enabled) {
-                    return '<span class="inline-block px-2 py-1 text-xs font-semibold bg-green-100 text-green-700 rounded">Вкл</span>';
-                }
+            function genderBadgeHtml(label, active) {
+                const classes = active
+                    ? 'inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700'
+                    : 'inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-700';
 
-                return '<span class="inline-block px-2 py-1 text-xs font-semibold bg-gray-200 text-gray-700 rounded">Выкл</span>';
+                return '<span data-gender-badge="' + (label === 'М' ? 'male' : 'female') + '" class="' + classes + '">' + label + '</span>';
+            }
+
+            function birthdayStatusHtml(hasMale, hasFemale) {
+                return '<span class="inline-flex gap-1">'
+                    + genderBadgeHtml('М', hasMale)
+                    + genderBadgeHtml('Ж', hasFemale)
+                    + '</span>';
+            }
+
+            function syncTextsVisibility() {
+                if (checkbox.checked) {
+                    textsBlock.classList.remove('hidden');
+                } else {
+                    textsBlock.classList.add('hidden');
+                }
             }
 
             function openOffcanvas(row) {
@@ -590,6 +650,10 @@
                 title.textContent = row.dataset.agentName || '';
                 phone.textContent = row.dataset.agentPhone || '';
                 checkbox.checked = row.dataset.wishBirthday === '1';
+                const texts = birthdayTextsByAgent[row.dataset.agentId] || { male: '', female: '' };
+                maleTextarea.value = texts.male || '';
+                femaleTextarea.value = texts.female || '';
+                syncTextsVisibility();
                 form.action = '/agents/settings/' + row.dataset.agentId;
                 feedback.textContent = '';
                 feedback.className = 'mt-4 min-h-5 text-sm';
@@ -615,6 +679,8 @@
                     root.setAttribute('aria-hidden', 'true');
                 }, 300);
             }
+
+            checkbox.addEventListener('change', syncTextsVisibility);
 
             tableEl.addEventListener('click', function (event) {
                 if (event.target.closest('a, button, input, label, form')) {
@@ -645,9 +711,13 @@
                 }
 
                 const enabled = checkbox.checked;
+                const maleText = maleTextarea.value;
+                const femaleText = femaleTextarea.value;
                 const formData = new FormData();
                 formData.append('_token', csrf);
                 formData.append('wish_happy_birthday', enabled ? '1' : '0');
+                formData.append('birthday_wish_male_text', maleText);
+                formData.append('birthday_wish_female_text', femaleText);
 
                 submitButton.disabled = true;
                 feedback.textContent = '';
@@ -682,12 +752,23 @@
                     }
 
                     const saved = Boolean(data.wish_happy_birthday);
+                    const hasMale = Boolean(data.has_male_text) && saved;
+                    const hasFemale = Boolean(data.has_female_text) && saved;
                     currentRow.dataset.wishBirthday = saved ? '1' : '0';
+                    currentRow.dataset.hasMaleText = hasMale ? '1' : '0';
+                    currentRow.dataset.hasFemaleText = hasFemale ? '1' : '0';
                     checkbox.checked = saved;
+                    maleTextarea.value = data.birthday_wish_male_text || '';
+                    femaleTextarea.value = data.birthday_wish_female_text || '';
+                    birthdayTextsByAgent[currentRow.dataset.agentId] = {
+                        male: data.birthday_wish_male_text || '',
+                        female: data.birthday_wish_female_text || '',
+                    };
+                    syncTextsVisibility();
                     const statusCell = currentRow.querySelector('[data-birthday-status]');
                     if (statusCell) {
-                        statusCell.innerHTML = birthdayBadge(saved);
-                        statusCell.setAttribute('data-order', saved ? '1' : '0');
+                        statusCell.innerHTML = birthdayStatusHtml(hasMale, hasFemale);
+                        statusCell.setAttribute('data-order', String((hasMale ? 2 : 0) + (hasFemale ? 1 : 0)));
                     }
                     feedback.textContent = (data.messages && data.messages[0]) || 'Настройки сохранены';
                     feedback.classList.add('text-green-700');

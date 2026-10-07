@@ -43,7 +43,18 @@ class AgentController extends Controller
 
         $settings = Setting::all()->keyBy('agent_id');
 
-        return view('agents-list', compact('agents', 'vkUsers', 'stats', 'settings'));
+        $birthdayTextsByAgent = $agents->mapWithKeys(function (Agent $agent) use ($settings): array {
+            $setting = $settings[$agent->id] ?? null;
+
+            return [
+                (string) $agent->id => [
+                    'male' => (string) ($setting->birthday_wish_male_text ?? ''),
+                    'female' => (string) ($setting->birthday_wish_female_text ?? ''),
+                ],
+            ];
+        });
+
+        return view('agents-list', compact('agents', 'vkUsers', 'stats', 'settings', 'birthdayTextsByAgent'));
     }
 
     public function create()
@@ -88,10 +99,16 @@ class AgentController extends Controller
     {
         $agent = Agent::findOrFail($id);
         $wishHappyBirthday = $request->boolean('wish_happy_birthday');
+        $maleText = $this->nullableTrimmedText($request->input('birthday_wish_male_text'));
+        $femaleText = $this->nullableTrimmedText($request->input('birthday_wish_female_text'));
 
         Setting::updateOrCreate(
             ['agent_id' => $agent->id],
-            ['wish_happy_birthday' => $wishHappyBirthday]
+            [
+                'wish_happy_birthday' => $wishHappyBirthday,
+                'birthday_wish_male_text' => $maleText,
+                'birthday_wish_female_text' => $femaleText,
+            ]
         );
 
         Log::channel('job')->info('Настройки агента обновлены', [
@@ -104,7 +121,22 @@ class AgentController extends Controller
             'messages' => ['Настройки сохранены'],
             'redirect' => null,
             'wish_happy_birthday' => $wishHappyBirthday,
+            'birthday_wish_male_text' => $maleText ?? '',
+            'birthday_wish_female_text' => $femaleText ?? '',
+            'has_male_text' => $maleText !== null,
+            'has_female_text' => $femaleText !== null,
         ]);
+    }
+
+    private function nullableTrimmedText(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $text = trim($value);
+
+        return $text === '' ? null : $text;
     }
 
     public function save(UpdateAgentRequest $request, int $id)

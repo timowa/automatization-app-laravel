@@ -31,6 +31,7 @@ final class SyncAgentVkFriendsAction
             'first_name' => (string) ($friend['first_name'] ?? ''),
             'last_name' => (string) ($friend['last_name'] ?? ''),
             'middle_name' => $friend['middle_name'] ?? $friend['nickname'] ?? null,
+            'sex' => isset($friend['sex']) ? (int) $friend['sex'] : null,
             'created_at' => $now,
             'updated_at' => $now,
         ], $friends);
@@ -39,7 +40,7 @@ final class SyncAgentVkFriendsAction
             DB::table('agents_vk_friends')->upsert(
                 $chunk,
                 ['agent_id', 'user_id'],
-                ['bdate', 'first_name', 'last_name', 'middle_name', 'updated_at']
+                ['bdate', 'first_name', 'last_name', 'middle_name', 'sex', 'updated_at']
             );
         }
 

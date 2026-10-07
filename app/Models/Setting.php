@@ -12,6 +12,8 @@ class Setting extends Model
     protected $fillable = [
         'agent_id',
         'wish_happy_birthday',
+        'birthday_wish_male_text',
+        'birthday_wish_female_text',
     ];
 
     protected $casts = [

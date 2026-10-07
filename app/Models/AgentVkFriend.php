@@ -18,11 +18,15 @@ class AgentVkFriend extends Model
         'first_name',
         'last_name',
         'middle_name',
+        'sex',
+        'last_birthday_wish_at',
     ];
 
     protected $casts = [
         'agent_id' => 'integer',
         'user_id' => 'integer',
+        'sex' => 'integer',
+        'last_birthday_wish_at' => 'date',
     ];
 
     public function agent(): BelongsTo
