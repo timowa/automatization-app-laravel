@@ -16,10 +16,13 @@
                         <a href="/agents" class="font-bold text-lg">Агенты</a>
                         <a href="/posts" class="font-bold text-lg">Посты</a>
                     </div>
-                    <form action="/logout" method="POST" class="inline">
-                        @csrf
-                        <button type="submit" class="text-sm text-red-600 hover:underline">Выйти</button>
-                    </form>
+                    <div class="flex items-center gap-4">
+                        @include('partials.version-menu')
+                        <form action="/logout" method="POST" class="inline">
+                            @csrf
+                            <button type="submit" class="text-sm text-red-600 hover:underline">Выйти</button>
+                        </form>
+                    </div>
                 </div>
             </nav>
         @endif
@@ -31,6 +34,83 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            (function initProductVersionMenu() {
+                const root = document.getElementById('product-version-menu');
+                if (!root) return;
+                const toggle = document.getElementById('product-version-toggle');
+                const dropdown = document.getElementById('product-version-dropdown');
+                if (!toggle || !dropdown) return;
+
+                let versionMarkedSeen = false;
+
+                const markVersionSeen = function () {
+                    if (versionMarkedSeen) return;
+                    versionMarkedSeen = true;
+
+                    const badge = document.getElementById('version-new-badge');
+                    if (badge) {
+                        badge.remove();
+                    }
+
+                    const url = root.getAttribute('data-seen-url');
+                    const csrf = root.getAttribute('data-csrf');
+                    if (!url || !csrf) return;
+
+                    fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json',
+                            'X-CSRF-TOKEN': csrf,
+                            'Content-Type': 'application/json',
+                        },
+                        body: '{}',
+                        credentials: 'same-origin',
+                    }).catch(function (err) {
+                        console.error(err);
+                        versionMarkedSeen = false;
+                    });
+                };
+
+                let closeTimer = null;
+
+                const open = () => {
+                    if (closeTimer) {
+                        clearTimeout(closeTimer);
+                        closeTimer = null;
+                    }
+                    dropdown.classList.remove('hidden');
+                    toggle.setAttribute('aria-expanded', 'true');
+                };
+                const close = () => {
+                    dropdown.classList.add('hidden');
+                    toggle.setAttribute('aria-expanded', 'false');
+                };
+                const scheduleClose = () => {
+                    if (closeTimer) {
+                        clearTimeout(closeTimer);
+                    }
+                    closeTimer = setTimeout(close, 150);
+                };
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    markVersionSeen();
+                    if (dropdown.classList.contains('hidden')) {
+                        open();
+                    } else {
+                        close();
+                    }
+                });
+                root.addEventListener('mouseenter', open);
+                root.addEventListener('mouseleave', scheduleClose);
+                document.addEventListener('click', function (e) {
+                    if (!root.contains(e.target)) {
+                        close();
+                    }
+                });
+            })();
+
             document.querySelectorAll('form.ajaxForm').forEach(function (form) {
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();
