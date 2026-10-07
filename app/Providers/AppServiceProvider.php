@@ -27,6 +27,7 @@ class AppServiceProvider extends ServiceProvider
             $view->with([
                 'productVersion' => $changelog->currentLabel(),
                 'recentReleases' => $changelog->latest(4),
+                'showVersionNewBadge' => $changelog->consumeNewBadge(),
             ]);
         });
     }

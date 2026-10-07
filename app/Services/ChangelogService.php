@@ -4,6 +4,8 @@ namespace App\Services;
 
 class ChangelogService
 {
+    public const SESSION_SEEN_VERSION_KEY = 'product_version_seen';
+
     public function current(): string
     {
         return (string) config('changelog.current', '1.0');
@@ -12,6 +14,24 @@ class ChangelogService
     public function currentLabel(): string
     {
         return 'v'.$this->current();
+    }
+
+    /**
+     * Показать бейдж New, если пользователь ещё не видел текущую версию в этой сессии.
+     * После первого показа версия помечается просмотренной — на следующих запросах бейджа нет.
+     */
+    public function consumeNewBadge(): bool
+    {
+        $current = $this->current();
+        $seen = session(self::SESSION_SEEN_VERSION_KEY);
+
+        $showNew = $seen !== $current;
+
+        if ($showNew) {
+            session([self::SESSION_SEEN_VERSION_KEY => $current]);
+        }
+
+        return $showNew;
     }
 
     /**

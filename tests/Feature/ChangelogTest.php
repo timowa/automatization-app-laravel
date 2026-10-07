@@ -15,6 +15,7 @@ class ChangelogTest extends TestCase
         $this->assertNotEmpty($releases);
         $this->assertSame($releases[0]['version'], $changelog->current());
         $this->assertSame('v'.$changelog->current(), $changelog->currentLabel());
+        $this->assertGreaterThanOrEqual(10, count($releases[0]['changes']));
     }
 
     public function test_changelog_page_requires_admin(): void
@@ -35,6 +36,7 @@ class ChangelogTest extends TestCase
         $response->assertOk();
         $response->assertSee($label, false);
         $response->assertSee('История версий', false);
+        $response->assertSee('Вебхук POST /offer', false);
     }
 
     public function test_layout_version_menu_is_rendered_on_changelog_page(): void
@@ -46,5 +48,24 @@ class ChangelogTest extends TestCase
         $response->assertOk();
         $response->assertSee('product-version-menu', false);
         $response->assertSee('Все версии', false);
+    }
+
+    public function test_new_badge_shown_only_on_first_open_after_version_change(): void
+    {
+        $this->withoutVite();
+
+        $current = app(ChangelogService::class)->current();
+
+        $first = $this->withSession(['is_admin' => true])->get('/changelog');
+        $first->assertOk();
+        $first->assertSee('data-version-new-badge', false);
+        $first->assertSessionHas(ChangelogService::SESSION_SEEN_VERSION_KEY, $current);
+
+        $second = $this->withSession([
+            'is_admin' => true,
+            ChangelogService::SESSION_SEEN_VERSION_KEY => $current,
+        ])->get('/changelog');
+        $second->assertOk();
+        $second->assertDontSee('data-version-new-badge', false);
     }
 }

@@ -1,17 +1,24 @@
 @php
     /** @var string $productVersion */
     /** @var list<array{version: string, date: string, changes: list<string>}> $recentReleases */
+    /** @var bool $showVersionNewBadge */
 @endphp
 <div class="relative" id="product-version-menu">
     <button
         type="button"
         id="product-version-toggle"
-        class="text-sm text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-50"
+        class="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 px-2 py-1 rounded hover:bg-gray-50"
         aria-haspopup="true"
         aria-expanded="false"
         aria-controls="product-version-dropdown"
     >
-        {{ $productVersion }}
+        <span>{{ $productVersion }}</span>
+        @if (!empty($showVersionNewBadge))
+            <span
+                data-version-new-badge
+                class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-600 text-white leading-none"
+            >new</span>
+        @endif
     </button>
     <div
         id="product-version-dropdown"
@@ -29,11 +36,11 @@
                         @endif
                     </div>
                     <ul class="mt-1 space-y-0.5">
-                        @foreach (array_slice($release['changes'], 0, 2) as $change)
-                            <li class="text-xs text-gray-600 leading-snug">{{ $change }}</li>
+                        @foreach (array_slice($release['changes'], 0, 3) as $change)
+                            <li class="text-xs text-gray-600 leading-snug">• {{ $change }}</li>
                         @endforeach
-                        @if (count($release['changes']) > 2)
-                            <li class="text-xs text-gray-400">…</li>
+                        @if (count($release['changes']) > 3)
+                            <li class="text-xs text-gray-400">… ещё {{ count($release['changes']) - 3 }} — на странице всех версий</li>
                         @endif
                     </ul>
                 </li>
