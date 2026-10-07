@@ -31,6 +31,13 @@ class AgentSettingsTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Поздравления');
+        $response->assertSee('id="agents-table"', false);
+        $response->assertSee('id="agents-sticky-hscroll"', false);
+        $response->assertSee('Столбцы');
+        $response->assertSee('Сбросить столбцы');
+        $response->assertSee('jquery-3.7.1.min.js', false);
+        $response->assertSee('dataTables.min.js', false);
+        $response->assertSee('buttons.colVis.min.js', false);
         $response->assertSee('id="agent-settings-offcanvas"', false);
         $response->assertSee('data-agent-id="'.$enabled->id.'"', false);
         $response->assertSee('data-wish-birthday="1"', false);

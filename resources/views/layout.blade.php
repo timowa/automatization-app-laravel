@@ -6,6 +6,7 @@
     <title>@yield('title', config('app.name'))</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.tailwindcss.com"></script>
+    @stack('styles')
 </head>
 <body class="bg-gray-100 text-gray-800">
     <div class="min-h-screen">
