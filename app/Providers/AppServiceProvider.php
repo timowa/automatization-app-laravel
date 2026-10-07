@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Services\ChangelogService;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -11,7 +13,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(ChangelogService::class);
     }
 
     /**
@@ -19,6 +21,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        View::composer('layout', function ($view): void {
+            $changelog = app(ChangelogService::class);
+
+            $view->with([
+                'productVersion' => $changelog->currentLabel(),
+                'recentReleases' => $changelog->latest(4),
+            ]);
+        });
     }
 }
+

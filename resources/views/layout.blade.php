@@ -16,10 +16,13 @@
                         <a href="/agents" class="font-bold text-lg">Агенты</a>
                         <a href="/posts" class="font-bold text-lg">Посты</a>
                     </div>
-                    <form action="/logout" method="POST" class="inline">
-                        @csrf
-                        <button type="submit" class="text-sm text-red-600 hover:underline">Выйти</button>
-                    </form>
+                    <div class="flex items-center gap-4">
+                        @include('partials.version-menu')
+                        <form action="/logout" method="POST" class="inline">
+                            @csrf
+                            <button type="submit" class="text-sm text-red-600 hover:underline">Выйти</button>
+                        </form>
+                    </div>
                 </div>
             </nav>
         @endif
@@ -31,6 +34,39 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function () {
+            (function initProductVersionMenu() {
+                const root = document.getElementById('product-version-menu');
+                if (!root) return;
+                const toggle = document.getElementById('product-version-toggle');
+                const dropdown = document.getElementById('product-version-dropdown');
+                if (!toggle || !dropdown) return;
+
+                const open = () => {
+                    dropdown.classList.remove('hidden');
+                    toggle.setAttribute('aria-expanded', 'true');
+                };
+                const close = () => {
+                    dropdown.classList.add('hidden');
+                    toggle.setAttribute('aria-expanded', 'false');
+                };
+
+                toggle.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    if (dropdown.classList.contains('hidden')) {
+                        open();
+                    } else {
+                        close();
+                    }
+                });
+                root.addEventListener('mouseenter', open);
+                root.addEventListener('mouseleave', close);
+                document.addEventListener('click', function (e) {
+                    if (!root.contains(e.target)) {
+                        close();
+                    }
+                });
+            })();
+
             document.querySelectorAll('form.ajaxForm').forEach(function (form) {
                 form.addEventListener('submit', function (e) {
                     e.preventDefault();

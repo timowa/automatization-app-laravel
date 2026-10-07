@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\ChangelogController;
 use App\Http\Controllers\OfferController;
 use App\Http\Controllers\StatController;
 use App\Http\Controllers\VkWallPostController;
@@ -29,4 +30,5 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::post('/agents/update-token/{id}', [AgentController::class, 'updateToken']);
     Route::post('/agents/token-permissions/{id}', [AgentController::class, 'getTokenPermissions']);
     Route::get('/posts', [VkWallPostController::class, 'index']);
+    Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog');
 });
