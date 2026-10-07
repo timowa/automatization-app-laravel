@@ -72,13 +72,25 @@
                     });
                 };
 
+                let closeTimer = null;
+
                 const open = () => {
+                    if (closeTimer) {
+                        clearTimeout(closeTimer);
+                        closeTimer = null;
+                    }
                     dropdown.classList.remove('hidden');
                     toggle.setAttribute('aria-expanded', 'true');
                 };
                 const close = () => {
                     dropdown.classList.add('hidden');
                     toggle.setAttribute('aria-expanded', 'false');
+                };
+                const scheduleClose = () => {
+                    if (closeTimer) {
+                        clearTimeout(closeTimer);
+                    }
+                    closeTimer = setTimeout(close, 150);
                 };
 
                 toggle.addEventListener('click', function (e) {
@@ -91,7 +103,7 @@
                     }
                 });
                 root.addEventListener('mouseenter', open);
-                root.addEventListener('mouseleave', close);
+                root.addEventListener('mouseleave', scheduleClose);
                 document.addEventListener('click', function (e) {
                     if (!root.contains(e.target)) {
                         close();
