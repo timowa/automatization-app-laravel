@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Enums\BirthdayWishGenderStatus;
 use App\Enums\Vk\Sex;
 use App\Models\Setting;
+use App\Services\Vk\Message\BirthdayWishTextGenerator;
 use Carbon\Carbon;
 use DateTimeInterface;
 
@@ -29,12 +31,17 @@ final class BirthdayWishEligibility
         return $age >= 18 && $age <= 70;
     }
 
-    public static function messageForFriend(Setting $setting, ?int $sex): ?string
+    public static function isEnabledForSex(Setting $setting, ?int $sex): bool
     {
-        if (! $setting->wish_happy_birthday) {
-            return null;
-        }
+        return match ($sex) {
+            Sex::MALE->value => (bool) $setting->wish_happy_birthday_male,
+            Sex::FEMALE->value => (bool) $setting->wish_happy_birthday_female,
+            default => false,
+        };
+    }
 
+    public static function customTextForSex(Setting $setting, ?int $sex): ?string
+    {
         $raw = match ($sex) {
             Sex::MALE->value => $setting->birthday_wish_male_text,
             Sex::FEMALE->value => $setting->birthday_wish_female_text,
@@ -50,16 +57,36 @@ final class BirthdayWishEligibility
         return $text === '' ? null : $text;
     }
 
-    public static function hasMaleText(Setting $setting): bool
-    {
-        return is_string($setting->birthday_wish_male_text)
-            && trim($setting->birthday_wish_male_text) !== '';
+    public static function messageForFriend(
+        Setting $setting,
+        ?int $sex,
+        string $friendName,
+        string $agentName,
+        ?BirthdayWishTextGenerator $textGenerator = null,
+    ): ?string {
+        if (! self::isEnabledForSex($setting, $sex)) {
+            return null;
+        }
+
+        $customText = self::customTextForSex($setting, $sex);
+        if ($customText !== null) {
+            return $customText;
+        }
+
+        $generator = $textGenerator ?? new BirthdayWishTextGenerator;
+
+        return $generator->generate($friendName, $agentName);
     }
 
-    public static function hasFemaleText(Setting $setting): bool
+    public static function statusForSex(Setting $setting, ?int $sex): BirthdayWishGenderStatus
     {
-        return is_string($setting->birthday_wish_female_text)
-            && trim($setting->birthday_wish_female_text) !== '';
+        if (! self::isEnabledForSex($setting, $sex)) {
+            return BirthdayWishGenderStatus::Off;
+        }
+
+        return self::customTextForSex($setting, $sex) !== null
+            ? BirthdayWishGenderStatus::Custom
+            : BirthdayWishGenderStatus::Default;
     }
 
     public static function wasWishedThisYear(mixed $lastBirthdayWishAt, ?DateTimeInterface $on = null): bool

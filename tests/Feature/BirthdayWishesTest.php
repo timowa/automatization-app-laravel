@@ -32,7 +32,8 @@ class BirthdayWishesTest extends TestCase
         $agent = Agent::factory()->create();
         Setting::create([
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => true,
             'birthday_wish_male_text' => 'Текст для мужчин',
             'birthday_wish_female_text' => null,
         ]);
@@ -40,11 +41,12 @@ class BirthdayWishesTest extends TestCase
         $response = $this->withSession(['is_admin' => true])->get('/agents');
 
         $response->assertOk();
-        $response->assertSee('Поздравление для мужчин', false);
-        $response->assertSee('Поздравление для женщин', false);
+        $response->assertSee('Текст поздравления для мужчин', false);
+        $response->assertSee('Текст поздравления для женщин', false);
         $response->assertSee('data-gender-badge="male"', false);
         $response->assertSee('data-gender-badge="female"', false);
         $response->assertSee('bg-green-100 text-green-700', false);
+        $response->assertSee('bg-yellow-100 text-yellow-800', false);
         $response->assertDontSee('>Вкл<', false);
         $response->assertDontSee('>Выкл<', false);
     }
@@ -54,7 +56,8 @@ class BirthdayWishesTest extends TestCase
         $agent = Agent::factory()->create();
 
         $response = $this->withSession(['is_admin' => true])->postJson('/agents/settings/'.$agent->id, [
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => true,
             'birthday_wish_male_text' => 'Мужской текст',
             'birthday_wish_female_text' => ' Женский текст ',
         ]);
@@ -62,7 +65,8 @@ class BirthdayWishesTest extends TestCase
         $response->assertOk();
         $response->assertJson([
             'success' => true,
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => true,
             'has_male_text' => true,
             'has_female_text' => true,
             'birthday_wish_male_text' => 'Мужской текст',
@@ -71,7 +75,8 @@ class BirthdayWishesTest extends TestCase
 
         $this->assertDatabaseHas('settings', [
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => 1,
+            'wish_happy_birthday_male' => 1,
+            'wish_happy_birthday_female' => 1,
             'birthday_wish_male_text' => 'Мужской текст',
             'birthday_wish_female_text' => 'Женский текст',
         ]);
@@ -85,9 +90,10 @@ class BirthdayWishesTest extends TestCase
         $agent = Agent::factory()->create();
         Setting::create([
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => true,
-            'birthday_wish_male_text' => 'Мужской текст',
-            'birthday_wish_female_text' => 'Женский текст',
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => true,
+            'birthday_wish_male_text' => null,
+            'birthday_wish_female_text' => null,
         ]);
 
         AgentVkFriend::query()->create([
@@ -142,7 +148,7 @@ class BirthdayWishesTest extends TestCase
         });
     }
 
-    public function test_wish_job_sends_agent_text_and_stores_wish_date(): void
+    public function test_wish_job_sends_custom_text_and_stores_wish_date(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-07'));
 
@@ -154,7 +160,8 @@ class BirthdayWishesTest extends TestCase
         ]);
         Setting::create([
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => false,
             'birthday_wish_male_text' => 'Кастомный текст для мужчин',
             'birthday_wish_female_text' => null,
         ]);
@@ -187,6 +194,41 @@ class BirthdayWishesTest extends TestCase
         $this->assertSame('2026-10-07', $friend->last_birthday_wish_at?->toDateString());
     }
 
+    public function test_wish_job_sends_template_when_custom_text_empty(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-07'));
+
+        $agent = Agent::factory()->create(['name' => 'Тестовый Агент']);
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => false,
+            'birthday_wish_male_text' => null,
+        ]);
+        AgentVkFriend::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 557,
+            'bdate' => '1996-10-07',
+            'first_name' => 'Иван',
+            'last_name' => 'Иванов',
+            'sex' => Sex::MALE->value,
+        ]);
+
+        $fake = new FakeVkApiService;
+
+        (new WishHappyBirthdayJob($agent->id, 557))->handle($fake);
+
+        $message = collect($fake->calls)->firstWhere('method', 'sendDirectMessage')['message'] ?? '';
+        $this->assertStringContainsString('Иван', $message);
+        $this->assertStringContainsString('Тестовый Агент', $message);
+        $this->assertStringContainsString('днём рождения', $message);
+    }
+
     public function test_wish_job_skips_when_already_wished_this_year(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-10-07'));
@@ -199,7 +241,7 @@ class BirthdayWishesTest extends TestCase
         ]);
         Setting::create([
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
             'birthday_wish_male_text' => 'Кастомный текст для мужчин',
         ]);
         AgentVkFriend::query()->create([

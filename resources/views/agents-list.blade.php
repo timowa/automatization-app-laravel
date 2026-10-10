@@ -222,26 +222,40 @@
                         $vkUser = $vkUsers[$agent->id] ?? null;
                         $hasVk = $vkUser instanceof \App\Models\VkUser && $vkUser->exists();
                         $agentSetting = $settings[$agent->id] ?? null;
-                        $wishHappyBirthday = (bool) ($agentSetting->wish_happy_birthday ?? false);
+                        $maleEnabled = (bool) ($agentSetting->wish_happy_birthday_male ?? false);
+                        $femaleEnabled = (bool) ($agentSetting->wish_happy_birthday_female ?? false);
                         $maleText = (string) ($agentSetting->birthday_wish_male_text ?? '');
                         $femaleText = (string) ($agentSetting->birthday_wish_female_text ?? '');
-                        $hasMaleText = $wishHappyBirthday && trim($maleText) !== '';
-                        $hasFemaleText = $wishHappyBirthday && trim($femaleText) !== '';
+                        $maleStatus = ! $maleEnabled
+                            ? 'off'
+                            : (trim($maleText) !== '' ? 'custom' : 'default');
+                        $femaleStatus = ! $femaleEnabled
+                            ? 'off'
+                            : (trim($femaleText) !== '' ? 'custom' : 'default');
+                        $badgeClass = static function (string $status): string {
+                            return match ($status) {
+                                'custom' => 'bg-green-100 text-green-700',
+                                'default' => 'bg-yellow-100 text-yellow-800',
+                                default => 'bg-gray-200 text-gray-700',
+                            };
+                        };
                         $agentStats = $stats[$agent->id] ?? null;
                         $tokenOrder = $hasVk ? ($vkUser->is_token_available ? 2 : 1) : 0;
                         $activityOrder = $agentStats
                             ? ((int) $agentStats->views + (int) $agentStats->reposts + (int) $agentStats->likes + (int) $agentStats->comments)
                             : -1;
-                        $birthdayOrder = ($hasMaleText ? 2 : 0) + ($hasFemaleText ? 1 : 0);
+                        $birthdayOrder = ($maleEnabled ? 2 : 0) + ($femaleEnabled ? 1 : 0)
+                            + (trim($maleText) !== '' ? 4 : 0) + (trim($femaleText) !== '' ? 8 : 0);
                     @endphp
                     <tr
                         class="cursor-pointer hover:bg-gray-50"
                         data-agent-id="{{ $agent->id }}"
                         data-agent-name="{{ $agent->name }}"
                         data-agent-phone="{{ $agent->phone }}"
-                        data-wish-birthday="{{ $wishHappyBirthday ? '1' : '0' }}"
-                        data-has-male-text="{{ $hasMaleText ? '1' : '0' }}"
-                        data-has-female-text="{{ $hasFemaleText ? '1' : '0' }}"
+                        data-wish-male="{{ $maleEnabled ? '1' : '0' }}"
+                        data-wish-female="{{ $femaleEnabled ? '1' : '0' }}"
+                        data-male-status="{{ $maleStatus }}"
+                        data-female-status="{{ $femaleStatus }}"
                     >
                         <td class="px-4 py-2" data-order="{{ $agent->phone }}">
                             <a href="/agents/edit/{{ $agent->id }}" class="font-bold">{{ $agent->phone }}</a>
@@ -249,8 +263,8 @@
                         <td class="px-4 py-2">{{ $agent->name }}</td>
                         <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $birthdayOrder }}" data-birthday-status>
                             <span class="inline-flex gap-1">
-                                <span data-gender-badge="male" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $hasMaleText ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700' }}">М</span>
-                                <span data-gender-badge="female" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $hasFemaleText ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700' }}">Ж</span>
+                                <span data-gender-badge="male" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($maleStatus) }}">М</span>
+                                <span data-gender-badge="female" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($femaleStatus) }}">Ж</span>
                             </span>
                         </td>
                         <td class="px-4 py-2 text-center" data-order="{{ $tokenOrder }}">
@@ -361,32 +375,35 @@
                 <button type="button" data-offcanvas-close class="text-2xl leading-none text-gray-500 hover:text-gray-800" aria-label="Закрыть">&times;</button>
             </div>
             <form id="agent-settings-form" method="POST" class="flex flex-1 flex-col px-6 py-5 overflow-y-auto">
-                <label class="inline-flex items-center gap-2">
-                    <input type="checkbox" name="wish_happy_birthday" value="1" class="rounded border-gray-300">
-                    <span class="text-sm font-medium">Автоматически поздравлять друзей с днём рождения</span>
-                </label>
-
-                <div data-birthday-texts class="mt-5 space-y-4 hidden">
+                <div class="space-y-5">
                     <div>
-                        <label for="birthday_wish_male_text" class="block text-sm font-medium mb-1">Поздравление для мужчин</label>
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" name="wish_happy_birthday_male" value="1" class="rounded border-gray-300">
+                            <span class="text-sm font-medium">Автоматически поздравлять с днём рождения мужчин</span>
+                        </label>
+                        <label for="birthday_wish_male_text" class="block text-sm font-medium mt-3 mb-1">Текст поздравления для мужчин</label>
                         <textarea
                             id="birthday_wish_male_text"
                             name="birthday_wish_male_text"
                             rows="6"
                             maxlength="4096"
                             class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Текст сообщения для мужчин"
+                            placeholder="Если пусто — отправится стандартный текст"
                         ></textarea>
                     </div>
                     <div>
-                        <label for="birthday_wish_female_text" class="block text-sm font-medium mb-1">Поздравление для женщин</label>
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" name="wish_happy_birthday_female" value="1" class="rounded border-gray-300">
+                            <span class="text-sm font-medium">Автоматически поздравлять с днём рождения женщин</span>
+                        </label>
+                        <label for="birthday_wish_female_text" class="block text-sm font-medium mt-3 mb-1">Текст поздравления для женщин</label>
                         <textarea
                             id="birthday_wish_female_text"
                             name="birthday_wish_female_text"
                             rows="6"
                             maxlength="4096"
                             class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
-                            placeholder="Текст сообщения для женщин"
+                            placeholder="Если пусто — отправится стандартный текст"
                         ></textarea>
                     </div>
                 </div>
@@ -605,8 +622,8 @@
             const title = document.getElementById('agent-settings-title');
             const phone = root.querySelector('[data-agent-phone]');
             const form = document.getElementById('agent-settings-form');
-            const checkbox = form.querySelector('input[name="wish_happy_birthday"]');
-            const textsBlock = form.querySelector('[data-birthday-texts]');
+            const maleCheckbox = form.querySelector('input[name="wish_happy_birthday_male"]');
+            const femaleCheckbox = form.querySelector('input[name="wish_happy_birthday_female"]');
             const maleTextarea = form.querySelector('textarea[name="birthday_wish_male_text"]');
             const femaleTextarea = form.querySelector('textarea[name="birthday_wish_female_text"]');
             const feedback = root.querySelector('[data-settings-feedback]');
@@ -622,38 +639,50 @@
             let currentRow = null;
             let hideTimer = null;
 
-            function genderBadgeHtml(label, active) {
-                const classes = active
-                    ? 'inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700'
-                    : 'inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-700';
-
-                return '<span data-gender-badge="' + (label === 'М' ? 'male' : 'female') + '" class="' + classes + '">' + label + '</span>';
-            }
-
-            function birthdayStatusHtml(hasMale, hasFemale) {
-                return '<span class="inline-flex gap-1">'
-                    + genderBadgeHtml('М', hasMale)
-                    + genderBadgeHtml('Ж', hasFemale)
-                    + '</span>';
-            }
-
-            function syncTextsVisibility() {
-                if (checkbox.checked) {
-                    textsBlock.classList.remove('hidden');
-                } else {
-                    textsBlock.classList.add('hidden');
+            function statusFromFlags(enabled, hasText) {
+                if (!enabled) {
+                    return 'off';
                 }
+
+                return hasText ? 'custom' : 'default';
+            }
+
+            function badgeClasses(status) {
+                if (status === 'custom') {
+                    return 'inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700';
+                }
+                if (status === 'default') {
+                    return 'inline-block px-2 py-1 text-xs font-semibold rounded bg-yellow-100 text-yellow-800';
+                }
+
+                return 'inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-700';
+            }
+
+            function genderBadgeHtml(label, status) {
+                return '<span data-gender-badge="' + (label === 'М' ? 'male' : 'female') + '" class="' + badgeClasses(status) + '">' + label + '</span>';
+            }
+
+            function birthdayStatusHtml(maleStatus, femaleStatus) {
+                return '<span class="inline-flex gap-1">'
+                    + genderBadgeHtml('М', maleStatus)
+                    + genderBadgeHtml('Ж', femaleStatus)
+                    + '</span>';
             }
 
             function openOffcanvas(row) {
                 currentRow = row;
                 title.textContent = row.dataset.agentName || '';
                 phone.textContent = row.dataset.agentPhone || '';
-                checkbox.checked = row.dataset.wishBirthday === '1';
-                const texts = birthdayTextsByAgent[row.dataset.agentId] || { male: '', female: '' };
+                const texts = birthdayTextsByAgent[row.dataset.agentId] || {
+                    male_enabled: false,
+                    female_enabled: false,
+                    male: '',
+                    female: '',
+                };
+                maleCheckbox.checked = Boolean(texts.male_enabled) || row.dataset.wishMale === '1';
+                femaleCheckbox.checked = Boolean(texts.female_enabled) || row.dataset.wishFemale === '1';
                 maleTextarea.value = texts.male || '';
                 femaleTextarea.value = texts.female || '';
-                syncTextsVisibility();
                 form.action = '/agents/settings/' + row.dataset.agentId;
                 feedback.textContent = '';
                 feedback.className = 'mt-4 min-h-5 text-sm';
@@ -666,7 +695,7 @@
                     backdrop.classList.add('opacity-100');
                     panel.classList.remove('translate-x-full');
                 });
-                checkbox.focus();
+                maleCheckbox.focus();
             }
 
             function closeOffcanvas() {
@@ -679,8 +708,6 @@
                     root.setAttribute('aria-hidden', 'true');
                 }, 300);
             }
-
-            checkbox.addEventListener('change', syncTextsVisibility);
 
             tableEl.addEventListener('click', function (event) {
                 if (event.target.closest('a, button, input, label, form')) {
@@ -710,12 +737,14 @@
                     return;
                 }
 
-                const enabled = checkbox.checked;
+                const maleEnabled = maleCheckbox.checked;
+                const femaleEnabled = femaleCheckbox.checked;
                 const maleText = maleTextarea.value;
                 const femaleText = femaleTextarea.value;
                 const formData = new FormData();
                 formData.append('_token', csrf);
-                formData.append('wish_happy_birthday', enabled ? '1' : '0');
+                formData.append('wish_happy_birthday_male', maleEnabled ? '1' : '0');
+                formData.append('wish_happy_birthday_female', femaleEnabled ? '1' : '0');
                 formData.append('birthday_wish_male_text', maleText);
                 formData.append('birthday_wish_female_text', femaleText);
 
@@ -751,24 +780,39 @@
                         return;
                     }
 
-                    const saved = Boolean(data.wish_happy_birthday);
-                    const hasMale = Boolean(data.has_male_text) && saved;
-                    const hasFemale = Boolean(data.has_female_text) && saved;
-                    currentRow.dataset.wishBirthday = saved ? '1' : '0';
-                    currentRow.dataset.hasMaleText = hasMale ? '1' : '0';
-                    currentRow.dataset.hasFemaleText = hasFemale ? '1' : '0';
-                    checkbox.checked = saved;
+                    const savedMale = Boolean(data.wish_happy_birthday_male);
+                    const savedFemale = Boolean(data.wish_happy_birthday_female);
+                    const hasMaleText = Boolean(data.has_male_text);
+                    const hasFemaleText = Boolean(data.has_female_text);
+                    const maleStatus = statusFromFlags(savedMale, hasMaleText);
+                    const femaleStatus = statusFromFlags(savedFemale, hasFemaleText);
+
+                    currentRow.dataset.wishMale = savedMale ? '1' : '0';
+                    currentRow.dataset.wishFemale = savedFemale ? '1' : '0';
+                    currentRow.dataset.maleStatus = maleStatus;
+                    currentRow.dataset.femaleStatus = femaleStatus;
+                    maleCheckbox.checked = savedMale;
+                    femaleCheckbox.checked = savedFemale;
                     maleTextarea.value = data.birthday_wish_male_text || '';
                     femaleTextarea.value = data.birthday_wish_female_text || '';
                     birthdayTextsByAgent[currentRow.dataset.agentId] = {
+                        male_enabled: savedMale,
+                        female_enabled: savedFemale,
                         male: data.birthday_wish_male_text || '',
                         female: data.birthday_wish_female_text || '',
                     };
-                    syncTextsVisibility();
                     const statusCell = currentRow.querySelector('[data-birthday-status]');
                     if (statusCell) {
-                        statusCell.innerHTML = birthdayStatusHtml(hasMale, hasFemale);
-                        statusCell.setAttribute('data-order', String((hasMale ? 2 : 0) + (hasFemale ? 1 : 0)));
+                        statusCell.innerHTML = birthdayStatusHtml(maleStatus, femaleStatus);
+                        statusCell.setAttribute(
+                            'data-order',
+                            String(
+                                (savedMale ? 2 : 0)
+                                + (savedFemale ? 1 : 0)
+                                + (hasMaleText ? 4 : 0)
+                                + (hasFemaleText ? 8 : 0)
+                            )
+                        );
                     }
                     feedback.textContent = (data.messages && data.messages[0]) || 'Настройки сохранены';
                     feedback.classList.add('text-green-700');

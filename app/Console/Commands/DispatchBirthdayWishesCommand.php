@@ -23,7 +23,6 @@ class DispatchBirthdayWishesCommand extends Command
 
         $birthdayFriends = DB::table('agents_vk_friends')
             ->join('settings', 'settings.agent_id', '=', 'agents_vk_friends.agent_id')
-            ->where('settings.wish_happy_birthday', true)
             ->whereIn('agents_vk_friends.sex', [Sex::FEMALE->value, Sex::MALE->value])
             ->where('agents_vk_friends.bdate', 'like', '____-'.$monthDay)
             ->where(function ($query): void {
@@ -36,14 +35,12 @@ class DispatchBirthdayWishesCommand extends Command
                     ->where(function ($maleQuery): void {
                         $maleQuery
                             ->where('agents_vk_friends.sex', Sex::MALE->value)
-                            ->whereNotNull('settings.birthday_wish_male_text')
-                            ->where('settings.birthday_wish_male_text', '!=', '');
+                            ->where('settings.wish_happy_birthday_male', true);
                     })
                     ->orWhere(function ($femaleQuery): void {
                         $femaleQuery
                             ->where('agents_vk_friends.sex', Sex::FEMALE->value)
-                            ->whereNotNull('settings.birthday_wish_female_text')
-                            ->where('settings.birthday_wish_female_text', '!=', '');
+                            ->where('settings.wish_happy_birthday_female', true);
                     });
             })
             ->orderBy('agents_vk_friends.agent_id')

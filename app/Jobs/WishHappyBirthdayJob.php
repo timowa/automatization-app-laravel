@@ -83,9 +83,14 @@ class WishHappyBirthdayJob implements ShouldQueue
             return;
         }
 
-        $message = BirthdayWishEligibility::messageForFriend($setting, $friend->sex);
+        $message = BirthdayWishEligibility::messageForFriend(
+            $setting,
+            $friend->sex,
+            (string) $friend->first_name,
+            (string) $agent->name,
+        );
         if ($message === null) {
-            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: нет подходящего текста или выключена настройка', [
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: выключена настройка для пола получателя', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
                 'sex' => $friend->sex,

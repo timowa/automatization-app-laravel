@@ -48,6 +48,8 @@ class AgentController extends Controller
 
             return [
                 (string) $agent->id => [
+                    'male_enabled' => (bool) ($setting->wish_happy_birthday_male ?? false),
+                    'female_enabled' => (bool) ($setting->wish_happy_birthday_female ?? false),
                     'male' => (string) ($setting->birthday_wish_male_text ?? ''),
                     'female' => (string) ($setting->birthday_wish_female_text ?? ''),
                 ],
@@ -76,7 +78,8 @@ class AgentController extends Controller
 
         Setting::create([
             'agent_id' => $agent->id,
-            'wish_happy_birthday' => false,
+            'wish_happy_birthday_male' => false,
+            'wish_happy_birthday_female' => false,
         ]);
 
         Log::channel('job')->info('Агент создан', ['agent_id' => $agent->id, 'name' => $agent->name]);
@@ -98,14 +101,16 @@ class AgentController extends Controller
     public function updateSettings(UpdateAgentSettingsRequest $request, int $id): JsonResponse
     {
         $agent = Agent::findOrFail($id);
-        $wishHappyBirthday = $request->boolean('wish_happy_birthday');
+        $wishMale = $request->boolean('wish_happy_birthday_male');
+        $wishFemale = $request->boolean('wish_happy_birthday_female');
         $maleText = $this->nullableTrimmedText($request->input('birthday_wish_male_text'));
         $femaleText = $this->nullableTrimmedText($request->input('birthday_wish_female_text'));
 
         Setting::updateOrCreate(
             ['agent_id' => $agent->id],
             [
-                'wish_happy_birthday' => $wishHappyBirthday,
+                'wish_happy_birthday_male' => $wishMale,
+                'wish_happy_birthday_female' => $wishFemale,
                 'birthday_wish_male_text' => $maleText,
                 'birthday_wish_female_text' => $femaleText,
             ]
@@ -113,14 +118,16 @@ class AgentController extends Controller
 
         Log::channel('job')->info('Настройки агента обновлены', [
             'agent_id' => $id,
-            'wish_happy_birthday' => $wishHappyBirthday,
+            'wish_happy_birthday_male' => $wishMale,
+            'wish_happy_birthday_female' => $wishFemale,
         ]);
 
         return response()->json([
             'success' => true,
             'messages' => ['Настройки сохранены'],
             'redirect' => null,
-            'wish_happy_birthday' => $wishHappyBirthday,
+            'wish_happy_birthday_male' => $wishMale,
+            'wish_happy_birthday_female' => $wishFemale,
             'birthday_wish_male_text' => $maleText ?? '',
             'birthday_wish_female_text' => $femaleText ?? '',
             'has_male_text' => $maleText !== null,

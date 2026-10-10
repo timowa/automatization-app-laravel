@@ -11,13 +11,15 @@ class Setting extends Model
 {
     protected $fillable = [
         'agent_id',
-        'wish_happy_birthday',
+        'wish_happy_birthday_male',
+        'wish_happy_birthday_female',
         'birthday_wish_male_text',
         'birthday_wish_female_text',
     ];
 
     protected $casts = [
-        'wish_happy_birthday' => 'boolean',
+        'wish_happy_birthday_male' => 'boolean',
+        'wish_happy_birthday_female' => 'boolean',
     ];
 
     public function agent(): BelongsTo

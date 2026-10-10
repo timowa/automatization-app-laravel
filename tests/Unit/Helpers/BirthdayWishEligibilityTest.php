@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Tests\Unit\Helpers;
 
+use App\Enums\BirthdayWishGenderStatus;
 use App\Enums\Vk\Sex;
 use App\Helpers\BirthdayWishEligibility;
 use App\Models\Setting;
+use App\Services\Vk\Message\BirthdayWishTextGenerator;
 use Carbon\Carbon;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
@@ -45,20 +47,77 @@ class BirthdayWishEligibilityTest extends TestCase
         ];
     }
 
-    public function test_message_depends_on_setting_sex_and_text(): void
+    public function test_message_uses_custom_text_when_enabled(): void
     {
         $setting = new Setting([
-            'wish_happy_birthday' => true,
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => false,
             'birthday_wish_male_text' => '  Привет, мужчина  ',
+            'birthday_wish_female_text' => 'Текст Ж',
+        ]);
+
+        $this->assertSame(
+            'Привет, мужчина',
+            BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value, 'Иван', 'Агент')
+        );
+        $this->assertNull(
+            BirthdayWishEligibility::messageForFriend($setting, Sex::FEMALE->value, 'Анна', 'Агент')
+        );
+        $this->assertNull(
+            BirthdayWishEligibility::messageForFriend($setting, Sex::UNSPECIFIED->value, 'Иван', 'Агент')
+        );
+    }
+
+    public function test_message_falls_back_to_template_when_text_empty(): void
+    {
+        $setting = new Setting([
+            'wish_happy_birthday_male' => true,
+            'wish_happy_birthday_female' => true,
+            'birthday_wish_male_text' => null,
             'birthday_wish_female_text' => '',
         ]);
 
-        $this->assertSame('Привет, мужчина', BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value));
-        $this->assertNull(BirthdayWishEligibility::messageForFriend($setting, Sex::FEMALE->value));
-        $this->assertNull(BirthdayWishEligibility::messageForFriend($setting, Sex::UNSPECIFIED->value));
+        $generator = new class extends BirthdayWishTextGenerator
+        {
+            public function generate(string $friendName, string $agentName): string
+            {
+                return "Шаблон: {$friendName} / {$agentName}";
+            }
+        };
 
-        $setting->wish_happy_birthday = false;
-        $this->assertNull(BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value));
+        $this->assertSame(
+            'Шаблон: Иван / Агент',
+            BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value, 'Иван', 'Агент', $generator)
+        );
+        $this->assertSame(
+            'Шаблон: Анна / Агент',
+            BirthdayWishEligibility::messageForFriend($setting, Sex::FEMALE->value, 'Анна', 'Агент', $generator)
+        );
+    }
+
+    public function test_status_for_sex(): void
+    {
+        $setting = new Setting([
+            'wish_happy_birthday_male' => false,
+            'wish_happy_birthday_female' => true,
+            'birthday_wish_male_text' => 'Есть текст',
+            'birthday_wish_female_text' => null,
+        ]);
+
+        $this->assertSame(
+            BirthdayWishGenderStatus::Off,
+            BirthdayWishEligibility::statusForSex($setting, Sex::MALE->value)
+        );
+        $this->assertSame(
+            BirthdayWishGenderStatus::Default,
+            BirthdayWishEligibility::statusForSex($setting, Sex::FEMALE->value)
+        );
+
+        $setting->birthday_wish_female_text = 'Свой текст';
+        $this->assertSame(
+            BirthdayWishGenderStatus::Custom,
+            BirthdayWishEligibility::statusForSex($setting, Sex::FEMALE->value)
+        );
     }
 
     public function test_was_wished_this_year(): void

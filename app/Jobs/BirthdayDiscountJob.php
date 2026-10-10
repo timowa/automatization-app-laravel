@@ -55,7 +55,7 @@ class BirthdayDiscountJob implements ShouldQueue
             return;
         }
 
-        if (! $agent->setting?->wish_happy_birthday) {
+        if (! $agent->setting?->wish_happy_birthday_male && ! $agent->setting?->wish_happy_birthday_female) {
             Log::channel('job')->warning('Скидка ко дню рождения отключена в настройках агента', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
