@@ -23,6 +23,42 @@ use VK\Exceptions\VKClientException;
 
 class VkApiService
 {
+    public const FRIEND_FIELDS = [
+        'bdate',
+        'city',
+        'contacts',
+        'country',
+        'domain',
+        'education',
+        'has_mobile',
+        'timezone',
+        'last_seen',
+        'nickname',
+        'online',
+        'photo_100',
+        'photo_200_orig',
+        'photo_50',
+        'photo_id',
+        'relation',
+        'relation_partner',
+        'sex',
+        'status',
+        'universities',
+        'deactivated',
+        'is_closed',
+        'home_town',
+        'has_photo',
+        'occupation',
+        'schools',
+        'lists',
+        'maiden_name',
+        'career',
+        'site',
+        'verified',
+        'blacklisted_by_me',
+        'followers_count',
+    ];
+
     protected string $token;
     protected VKApiClient $client;
 
@@ -256,7 +292,7 @@ VKSCRIPT;
         do {
             $response = $this->client->friends()->get($this->token, [
                 'user_id' => $userId,
-                'fields' => ['bdate', 'nickname', 'sex'],
+                'fields' => self::FRIEND_FIELDS,
                 'count' => $count,
                 'offset' => $offset,
             ]);
@@ -271,6 +307,34 @@ VKSCRIPT;
         } while ($items !== [] && $offset < (int) ($response['count'] ?? 0));
 
         return $friends;
+    }
+
+    /**
+     * @return array<int, string>
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function getFriendLists(): array
+    {
+        $response = $this->client->friends()->getLists($this->token, []);
+        $names = [];
+
+        foreach ($response['items'] ?? [] as $item) {
+            if (! is_array($item) || ! isset($item['id'])) {
+                continue;
+            }
+
+            $id = (int) $item['id'];
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = trim((string) ($item['name'] ?? ''));
+            $names[$id] = $name !== '' ? $name : (string) $id;
+        }
+
+        return $names;
     }
 
     /**

@@ -16,6 +16,9 @@ class FakeVkApiService extends VkApiService
     public array $storiesPostResponse = ['count' => 1];
     public array $friendsResponse = [];
 
+    /** @var array<int, string> */
+    public array $friendListsResponse = [];
+
     public function setFailNext(string $exceptionClass, string $message = 'VK API error'): void
     {
         $this->failNext = true;
@@ -103,6 +106,21 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('likePost');
 
         return ['likes' => fake()->numberBetween(1, 100)];
+    }
+
+    public function setToken(string $token): void
+    {
+        $this->token = $token;
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    public function getFriendLists(): array
+    {
+        $this->calls[] = ['method' => 'getFriendLists'];
+
+        return $this->friendListsResponse;
     }
 
     public function getFriends(int $userId): array

@@ -50,6 +50,7 @@ class VkUser extends Model
         'status',
         'verified',
         'raw',
+        'friends_synced_at',
     ];
 
     protected $casts = [
@@ -67,6 +68,7 @@ class VkUser extends Model
         'city_id' => 'integer',
         'country_id' => 'integer',
         'last_seen_at' => 'integer',
+        'friends_synced_at' => 'datetime',
     ];
 
     public function agent(): BelongsTo

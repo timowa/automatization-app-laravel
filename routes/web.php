@@ -23,6 +23,7 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::get('/agents/create', [AgentController::class, 'create']);
     Route::post('/agents', [AgentController::class, 'store']);
     Route::get('/agents/edit/{id}', [AgentController::class, 'edit']);
+    Route::get('/agents/{id}/friends', [AgentController::class, 'friends'])->whereNumber('id');
     Route::post('/agents/save/{id}', [AgentController::class, 'save']);
     Route::post('/agents/settings/{id}', [AgentController::class, 'updateSettings']);
     Route::post('/agents/delete/{id}', [AgentController::class, 'delete']);

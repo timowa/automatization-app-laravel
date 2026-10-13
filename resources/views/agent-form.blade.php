@@ -33,6 +33,7 @@
             @endif
 
             @if (!$isCreate)
+                <a href="/agents/{{ $agent->id }}/friends" class="block w-full text-center mb-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Друзья</a>
                 <a href="/agents/change-token/{{ $agent->id }}" class="block w-full text-center mb-4 py-2 bg-gray-200 rounded hover:bg-gray-300">Обновить токен</a>
                 <button type="button" class="check-token-permissions block w-full text-center mb-4 py-2 bg-gray-200 rounded hover:bg-gray-300" data-url="/agents/token-permissions/{{ $agent->id }}" data-csrf="{{ csrf_token() }}">Получить права токена</button>
             @endif

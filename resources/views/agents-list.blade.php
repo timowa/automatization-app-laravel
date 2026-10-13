@@ -194,6 +194,7 @@
                 <tr>
                     <th class="px-4 py-2 text-left">Телефон</th>
                     <th class="px-4 py-2 text-left">ФИО</th>
+                    <th class="px-4 py-2 text-left">Количество друзей</th>
                     <th class="px-4 py-2 text-left">Поздравления</th>
                     <th class="px-4 py-2 text-center">Токен</th>
                     <th class="px-4 py-2 text-center">Активность</th>
@@ -261,6 +262,16 @@
                             <a href="/agents/edit/{{ $agent->id }}" class="font-bold">{{ $agent->phone }}</a>
                         </td>
                         <td class="px-4 py-2">{{ $agent->name }}</td>
+                        @php
+                            $friendsCount = (int) ($friendCounts[$agent->id] ?? 0);
+                            $friendsUrl = '/agents/'.$agent->id.'/friends';
+                        @endphp
+                        <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $friendsCount }}">
+                            <span>{{ $friendsCount }}</span>
+                            <a href="{{ $friendsUrl }}" class="ml-2 inline-flex text-blue-600 hover:text-blue-800" title="Список друзей" aria-label="Список друзей">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                            </a>
+                        </td>
                         <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $birthdayOrder }}" data-birthday-status>
                             <span class="inline-flex gap-1">
                                 <span data-gender-badge="male" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($maleStatus) }}">М</span>

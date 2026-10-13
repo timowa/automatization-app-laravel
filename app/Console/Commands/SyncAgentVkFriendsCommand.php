@@ -11,13 +11,16 @@ use Illuminate\Support\Facades\Log;
 
 class SyncAgentVkFriendsCommand extends Command
 {
-    protected $signature = 'vk:sync-friends';
+    protected $signature = 'vk:sync-friends {--force : Обновить списки, даже если они синхронизировались меньше недели назад}';
+
     protected $description = 'Обновление списков друзей VK агентов';
 
     public function handle(SyncAgentVkFriendsAction $syncFriends): int
     {
         $syncedAgents = 0;
         $syncedFriends = 0;
+        $skippedAgents = 0;
+        $force = (bool) $this->option('force');
 
         foreach (VkUser::all() as $vkUser) {
             if ($vkUser->getToken() === '' || ! $vkUser->is_token_available) {
@@ -28,8 +31,21 @@ class SyncAgentVkFriendsCommand extends Command
                 continue;
             }
 
+            $calledApi = false;
+
             try {
-                $count = $syncFriends->execute($vkUser);
+                $count = $syncFriends->execute($vkUser, $force);
+                $calledApi = $count !== null;
+
+                if ($count === null) {
+                    $skippedAgents++;
+                    Log::channel('job')->info('Список друзей VK пропущен: обновлялся меньше недели назад', [
+                        'agent_id' => $vkUser->getAgentId(),
+                    ]);
+
+                    continue;
+                }
+
                 $syncedAgents++;
                 $syncedFriends += $count;
 
@@ -38,6 +54,7 @@ class SyncAgentVkFriendsCommand extends Command
                     'friends_count' => $count,
                 ]);
             } catch (\Throwable $e) {
+                $calledApi = true;
                 Log::channel('job')->warning('Ошибка обновления списка друзей VK агента', [
                     'agent_id' => $vkUser->getAgentId(),
                 ]);
@@ -47,10 +64,12 @@ class SyncAgentVkFriendsCommand extends Command
                 ]);
             }
 
-            usleep(350_000);
+            if ($calledApi) {
+                usleep(350_000);
+            }
         }
 
-        $this->info("Обновлено агентов: {$syncedAgents}, друзей: {$syncedFriends}");
+        $this->info("Обновлено агентов: {$syncedAgents}, друзей: {$syncedFriends}, пропущено: {$skippedAgents}");
 
         return self::SUCCESS;
     }
