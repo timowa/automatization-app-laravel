@@ -22,8 +22,7 @@ final class ScenarioVkPostTemplateResolver
         return match ($scenarioType) {
             ScenarioType::ANNOUNCEMENT => new AnnouncementTemplate,
             ScenarioType::RENT => new RentTemplate,
-            ScenarioType::SALE => new SaleTemplate,
-            ScenarioType::AGENT_CHANGED => new SaleTemplate,
+            ScenarioType::SALE, ScenarioType::AGENT_CHANGED => new SaleTemplate,
             ScenarioType::PRICE_CHANGED => new PriceChangedTemplate,
             ScenarioType::BOOKING => new BookedTemplate,
             ScenarioType::SOLD => new SoldTemplate,

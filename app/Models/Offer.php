@@ -104,9 +104,6 @@ class Offer extends Model
     public function getPrice(): int
     {
         $price = (int) $this->price;
-        if ($this->deal() === Deal::SALE && $price < 1_000_000) {
-            $price *= 100;
-        }
         return $price;
     }
 
