@@ -10,48 +10,40 @@ use App\Models\PublicationTask;
 use App\Scenarios\Scenario;
 use App\Scenarios\TaskDispatcher;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
 
 class CreatePublicationAction
 {
     public function __construct(
         private PublicationTaskDependenceInspector $dependenceInspector,
         private TaskDispatcher $taskDispatcher,
-    )
-    {
-    }
+    ) {}
 
     public function execute(Offer $offer, Scenario $scenario): void
     {
         $publication = DB::transaction(function () use ($offer, $scenario) {
             $publication = Publication::create([
                 'offer_id' => $offer->id,
-                'scenario' => $scenario->type()
+                'scenario' => $scenario->type(),
             ]);
 
             $tasks = [];
             foreach ($scenario->tasks() as $type) {
                 $dependsOn = $this->dependenceInspector->inspect($type);
-                if (is_null($dependsOn)) {
-                    $create = [
-                        'publication_id' => $publication->id,
-                        'type' => $type,
-                        'status' => PublicationTaskStatus::PENDING
-                    ];
-                } else {
-                    if (isset($tasks[$dependsOn->value])) {
-                        $dependedTask = $tasks[$dependsOn->value];
-                        $create = [
-                            'publication_id' => $publication->id,
-                            'type' => $type,
-                            'status' => PublicationTaskStatus::WAITING,
-                            'dependent_task_id' => $dependedTask->id
-                        ];
-                    }
+                $parentTask = $dependsOn !== null ? ($tasks[$dependsOn->value] ?? null) : null;
 
+                $attributes = [
+                    'publication_id' => $publication->id,
+                    'type' => $type,
+                    'status' => $parentTask !== null
+                        ? PublicationTaskStatus::WAITING
+                        : PublicationTaskStatus::PENDING,
+                ];
+
+                if ($parentTask !== null) {
+                    $attributes['dependent_task_id'] = $parentTask->id;
                 }
-                $tasks[$type->value] = PublicationTask::create($create);
 
+                $tasks[$type->value] = PublicationTask::create($attributes);
             }
 
             return $publication;

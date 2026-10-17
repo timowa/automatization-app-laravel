@@ -20,7 +20,7 @@ class ImageWatermarker
     {
         try {
             if (!file_exists(self::LOGO_PATH)) {
-                Log::channel('vk')->warning('Файл логотипа не найден: ' . self::LOGO_PATH);
+                Log::channel('vk-images')->warning('Файл логотипа не найден: ' . self::LOGO_PATH);
 
                 return $imagePath;
             }
@@ -39,7 +39,7 @@ class ImageWatermarker
 
             return $imagePath;
         } catch (\Throwable $e) {
-            Log::channel('vk')->error('Ошибка нанесения водяного знака: ' . $e->getMessage());
+            Log::channel('vk-images')->error('Ошибка нанесения водяного знака: ' . $e->getMessage());
 
             return $imagePath;
         }

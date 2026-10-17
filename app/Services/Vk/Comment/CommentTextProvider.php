@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Services\VK\Comment;
+namespace App\Services\Vk\Comment;
 
 final class CommentTextProvider
 {

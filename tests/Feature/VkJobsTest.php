@@ -7,6 +7,9 @@ namespace Tests\Feature;
 use App\Enums\City;
 use App\Enums\PublicationTaskStatus;
 use App\Enums\PublicationTaskType;
+use App\Helpers\JobResolver;
+use App\Helpers\PublicationTaskDependencyResolver;
+use App\Helpers\ScenarioVkPostTemplateResolver;
 use App\Jobs\ArchiveVkProductJob;
 use App\Jobs\CreateVkCommentJob;
 use App\Jobs\CreateVkLikeJob;
@@ -27,12 +30,10 @@ use App\Models\VkLoopStory;
 use App\Models\VkProduct;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
-use App\Helpers\JobResolver;
-use App\Helpers\PublicationTaskDependencyResolver;
-use App\Helpers\ScenarioVkPostTemplateResolver;
 use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\Comment\CommentTextProvider;
 use App\Services\Vk\FakeVkApiService;
+use App\Services\Vk\VkApiService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
@@ -49,7 +50,6 @@ class VkJobsTest extends TestCase
         $this->vkApi = new FakeVkApiService;
         Queue::fake();
     }
-
 
     private function jobDependencies(): array
     {
@@ -276,10 +276,48 @@ class VkJobsTest extends TestCase
         $this->assertEmpty(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createReposts'));
     }
 
+    public function test_create_vk_repost_job_succeeds_when_user_has_no_posting_rights(): void
+    {
+        VkGroup::factory()->create(['city' => City::KYZYL->value]);
+        $postTask = $this->createPostTaskForCity(City::KYZYL->value);
+        $vkUser = VkUser::query()->where('agent_id', $postTask->publication->offer->agent_id)->first();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $repostTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_REPOST)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $dependent = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_COMMENT)
+            ->dependsOn($repostTask)
+            ->create();
+
+        $this->vkApi->noRepostRights = true;
+        $job = new CreateVkRepostJob($repostTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $repostTask = $repostTask->fresh();
+        $dependent = $dependent->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $repostTask->status);
+        $this->assertNull($repostTask->error);
+        $this->assertSame(PublicationTaskStatus::QUEUED, $dependent->status);
+        $this->assertNotNull($vkUser);
+    }
+
     public function test_create_vk_stories_job_success(): void
     {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
         $postTask = $this->createPostTask();
-        \App\Models\OfferImage::factory()->create([
+        OfferImage::factory()->create([
             'offer_id' => $postTask->publication->offer_id,
             'original_url' => base_path('storage/app/assets/images/vkstory.png'),
         ]);
@@ -301,6 +339,88 @@ class VkJobsTest extends TestCase
 
         $storyTask = $storyTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $storyTask->status);
+    }
+
+    public function test_create_vk_stories_job_skips_when_offer_has_no_photo(): void
+    {
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $storyTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_STORY)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
+        $this->assertStringContainsString('нет фото', (string) $storyTask->error);
+        $this->assertStringNotContainsString('Undefined variable', (string) $storyTask->error);
+        $this->assertEmpty(array_filter($this->vkApi->calls, fn (array $call): bool => $call['method'] === 'storiesPost'));
+    }
+
+    public function test_create_vk_stories_job_fails_when_save_count_is_zero_without_token(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $postTask = $this->createPostTask();
+        OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $storyTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_STORY)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->storiesPostResponse = [
+            'count' => 0,
+            'access_token' => 'secret-token',
+        ];
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
+        $this->assertStringContainsString('count = 0', (string) $storyTask->error);
+        $this->assertStringNotContainsString('secret-token', (string) $storyTask->error);
+    }
+
+    public function test_container_resolves_comment_and_like_jobs(): void
+    {
+        $commentJob = $this->app->make(CreateVkCommentJob::class, ['taskId' => 1]);
+        $likeJob = $this->app->make(CreateVkLikeJob::class, ['taskId' => 1]);
+
+        $this->assertInstanceOf(CreateVkCommentJob::class, $commentJob);
+        $this->assertInstanceOf(CreateVkLikeJob::class, $likeJob);
+        $this->assertInstanceOf(CommentTextProvider::class, $this->app->make(CommentTextProvider::class));
+        $this->assertInstanceOf(VkApiService::class, $this->app->make(VkApiService::class));
+
+        foreach ([CreateVkCommentJob::class, CreateVkLikeJob::class] as $jobClass) {
+            $method = new \ReflectionMethod($jobClass, 'handle');
+            foreach ($method->getParameters() as $parameter) {
+                $type = $parameter->getType();
+                if (! $type instanceof \ReflectionNamedType || $type->isBuiltin()) {
+                    continue;
+                }
+
+                $this->assertInstanceOf($type->getName(), $this->app->make($type->getName()));
+            }
+        }
     }
 
     public function test_create_vk_comment_job_success(): void
@@ -403,8 +523,13 @@ class VkJobsTest extends TestCase
 
     public function test_create_vk_loop_story_job_creates_loop_story_record(): void
     {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
         $postTask = $this->createPostTask();
-        \App\Models\OfferImage::factory()->create([
+        OfferImage::factory()->create([
             'offer_id' => $postTask->publication->offer_id,
             'original_url' => base_path('storage/app/assets/images/vkstory.png'),
         ]);

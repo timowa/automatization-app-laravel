@@ -15,14 +15,25 @@ use Throwable;
 
 class SyncVkUserAction
 {
-    public function __construct(private readonly VkApiService $vkApi)
-    {
-    }
+    public const REQUEST_INTERVAL_MICROSECONDS = 400_000;
 
-    public function execute(VkUser $vkUser): void
+    private static float $notBefore = 0.0;
+
+    public function __construct(private readonly VkApiService $vkApi) {}
+
+    public function execute(VkUser $vkUser): bool
     {
-        if (!$vkUser->exists()) {
-            return;
+        if (! $vkUser->exists()) {
+            return false;
+        }
+
+        if (! $vkUser->is_token_available) {
+            Log::channel('vk-sync')->warning('Пропуск синхронизации: токен недоступен', [
+                'agent_id' => $vkUser->getAgentId(),
+                'vk_user_id' => $vkUser->vk_user_id,
+            ]);
+
+            return false;
         }
 
         $token = $vkUser->getToken();
@@ -31,8 +42,11 @@ class SyncVkUserAction
                 'agent_id' => $vkUser->getAgentId(),
                 'vk_user_id' => $vkUser->vk_user_id,
             ]);
-            return;
+
+            return false;
         }
+
+        $this->throttle();
 
         try {
             $this->vkApi->setToken($token);
@@ -67,7 +81,8 @@ class SyncVkUserAction
                     'agent_id' => $vkUser->getAgentId(),
                     'vk_user_id' => $vkUser->vk_user_id,
                 ]);
-                return;
+
+                return true;
             }
 
             $user = $response[0];
@@ -78,12 +93,26 @@ class SyncVkUserAction
                 'agent_id' => $vkUser->getAgentId(),
                 'vk_user_id' => $vkUser->vk_user_id,
             ]);
+
+            return true;
         } catch (Throwable $e) {
-            Log::channel('vk-sync')->error('Ошибка синхронизации VK: ' . $e->getMessage(), [
+            Log::channel('vk-sync')->error('Ошибка синхронизации VK: '.$e->getMessage(), [
                 'agent_id' => $vkUser->getAgentId(),
                 'vk_user_id' => $vkUser->vk_user_id,
             ]);
+
+            return true;
         }
+    }
+
+    private function throttle(): void
+    {
+        $now = microtime(true);
+        if ($now < self::$notBefore) {
+            usleep((int) ((self::$notBefore - $now) * 1_000_000));
+        }
+
+        self::$notBefore = microtime(true) + (self::REQUEST_INTERVAL_MICROSECONDS / 1_000_000);
     }
 
     protected function fillVkUserFromResponse(VkUser $vkUser, array $user): void

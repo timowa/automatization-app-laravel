@@ -2,11 +2,15 @@
 
 namespace Tests\Feature;
 
+use App\Enums\Category;
+use App\Enums\City;
 use App\Enums\Deal;
 use App\Enums\OfferStatus;
 use App\Enums\PublicationTaskStatus;
 use App\Enums\PublicationTaskType;
 use App\Enums\ScenarioType;
+use App\Helpers\JobResolver;
+use App\Helpers\PublicationTaskDependencyResolver;
 use App\Jobs\ArchiveVkProductJob;
 use App\Jobs\CreateVkCommentJob;
 use App\Jobs\CreateVkLikeJob;
@@ -23,6 +27,8 @@ use App\Models\Offer;
 use App\Models\OfferImage;
 use App\Models\Publication;
 use App\Models\PublicationTask;
+use App\Models\VkLoopStory;
+use App\Scenarios\TaskDispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
@@ -53,7 +59,7 @@ class WebhookScenarioTest extends TestCase
 
     private function payload(array $overrides = []): array
     {
-        $this->withHeader('Authorization', 'Bearer ' . config('app.api_key'));
+        $this->withHeader('Authorization', 'Bearer '.config('app.api_key'));
 
         return [
             'offers' => [
@@ -292,8 +298,8 @@ class WebhookScenarioTest extends TestCase
 
         $offer = Offer::first();
         $this->assertNotNull($offer);
-        $this->assertSame(\App\Enums\Category::HOUSE, $offer->category());
-        $this->assertSame(\App\Enums\City::UST_ABAKAN, $offer->city());
+        $this->assertSame(Category::HOUSE, $offer->category());
+        $this->assertSame(City::UST_ABAKAN, $offer->city());
     }
 
     public function test_land_category_is_parsed(): void
@@ -308,7 +314,7 @@ class WebhookScenarioTest extends TestCase
         $response->assertOk();
         $offer = Offer::first();
         $this->assertNotNull($offer);
-        $this->assertSame(\App\Enums\Category::LAND, $offer->category());
+        $this->assertSame(Category::LAND, $offer->category());
     }
 
     public function test_unknown_category_skips_offer_without_sql_error(): void
@@ -480,7 +486,7 @@ class WebhookScenarioTest extends TestCase
 
         $response = $this->postJson('/offer', $this->payload(['price' => 900_000]));
 
-        $this->assertSame(200, $response->status(), 'Response: ' . $response->getContent());
+        $this->assertSame(200, $response->status(), 'Response: '.$response->getContent());
         $this->assertDatabaseCount('offers', 2);
 
         $newOffer = Offer::latest('id')->first();
@@ -551,5 +557,85 @@ class WebhookScenarioTest extends TestCase
 
         $whereInQueries = array_filter($queries, fn (array $q): bool => str_contains($q['query'], '`original_url` in'));
         $this->assertEmpty($whereInQueries, 'Query for existing media_id should not be executed when imageUrls is empty');
+    }
+
+    public function test_kyzyl_kozhun_alias_is_parsed_as_kyzyl(): void
+    {
+        $this->assertSame(City::KYZYL, City::tryFromLabel('Кызылский кожуун'));
+
+        Agent::factory()->create(['phone' => '79953742476']);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'code' => '317-2147312',
+            'location' => [
+                'city' => 'Кызылский кожуун',
+                'address' => 'ул. Ленина, 1',
+            ],
+        ]));
+
+        $response->assertOk();
+        $offer = Offer::query()->where('code', '317-2147312')->first();
+        $this->assertNotNull($offer);
+        $this->assertSame(City::KYZYL, $offer->city());
+    }
+
+    public function test_rent_out_creates_one_story_and_stops_loop_without_parent_task(): void
+    {
+        $agent = Agent::factory()->create(['phone' => '79953742476']);
+        $previousOffer = Offer::factory()->create([
+            'agent_id' => $agent->id,
+            'code' => '219-254',
+            'status' => OfferStatus::ACTIVE->value,
+            'price' => 32000,
+            'deal' => Deal::RENT_OUT->value,
+        ]);
+        Publication::factory()->forOffer($previousOffer)->withScenario(ScenarioType::RENT)->create();
+        $loopStory = VkLoopStory::factory()->create([
+            'offer_id' => $previousOffer->id,
+            'is_active' => true,
+        ]);
+
+        $response = $this->postJson('/offer', $this->payload([
+            'code' => '219-254',
+            'deal' => 'сдача',
+            'status' => 'архив',
+            'price' => 32000,
+        ]));
+
+        $response->assertOk();
+
+        $offer = Offer::query()->where('code', '219-254')->latest('id')->first();
+        $this->assertNotNull($offer);
+        $this->assertNotSame($previousOffer->id, $offer->id);
+
+        $publication = Publication::query()->where('offer_id', $offer->id)->first();
+        $this->assertNotNull($publication);
+        $this->assertSame(ScenarioType::RENT_OUT, $publication->scenario);
+
+        $this->assertSame(1, PublicationTask::query()
+            ->where('publication_id', $publication->id)
+            ->where('type', PublicationTaskType::VK_STORY)
+            ->count());
+
+        $archiveTask = PublicationTask::query()
+            ->where('publication_id', $publication->id)
+            ->where('type', PublicationTaskType::VK_ARCHIVE_PRODUCT)
+            ->first();
+        $this->assertNotNull($archiveTask);
+        $this->assertNull($archiveTask->dependent_task_id);
+
+        $endTask = PublicationTask::query()
+            ->where('publication_id', $publication->id)
+            ->where('type', PublicationTaskType::VK_END_LOOP_STORY)
+            ->first();
+        $this->assertNotNull($endTask);
+        $this->assertNull($endTask->dependent_task_id);
+        $this->assertSame(PublicationTaskStatus::QUEUED, $endTask->status);
+
+        $job = new EndVkLoopStoryJob($endTask->id);
+        $job->handle(new PublicationTaskDependencyResolver, new TaskDispatcher(new JobResolver));
+
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $endTask->fresh()->status);
+        $this->assertFalse((bool) $loopStory->fresh()->is_active);
     }
 }

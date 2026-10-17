@@ -4,16 +4,24 @@ declare(strict_types=1);
 
 namespace App\Services\Vk;
 
+use App\Models\VkGroup;
 use VK\Client\VKApiError;
 use VK\Exceptions\VKApiException;
 
 class FakeVkApiService extends VkApiService
 {
     public array $calls = [];
+
     public bool $failNext = false;
+
     public string $failWith = VKApiException::class;
+
     public ?string $failMessage = 'VK API error';
+
     public array $storiesPostResponse = ['count' => 1];
+
+    public bool $noRepostRights = false;
+
     public array $friendsResponse = [];
 
     /** @var array<int, string> */
@@ -22,7 +30,7 @@ class FakeVkApiService extends VkApiService
     public function setFailNext(string $exceptionClass, string $message = 'VK API error'): void
     {
         $this->failNext = true;
-        $this->failWith = 'VK\\Exceptions\\' . ltrim($exceptionClass, '\\');
+        $this->failWith = 'VK\\Exceptions\\'.ltrim($exceptionClass, '\\');
         $this->failMessage = $message;
     }
 
@@ -36,7 +44,7 @@ class FakeVkApiService extends VkApiService
 
     private function maybeFail(string $method): void
     {
-        if (!$this->failNext) {
+        if (! $this->failNext) {
             return;
         }
 
@@ -84,6 +92,9 @@ class FakeVkApiService extends VkApiService
     public function createReposts(int $userId, string $postId, array $groupIds): array
     {
         $this->calls[] = ['method' => 'createReposts', 'post_id' => $postId, 'args' => $groupIds];
+        if ($this->noRepostRights) {
+            throw new \Exception(VkApiService::NO_REPOST_RIGHTS_MESSAGE);
+        }
         $this->maybeFail('createReposts');
 
         return array_map(fn ($groupId) => [
@@ -145,7 +156,7 @@ class FakeVkApiService extends VkApiService
 
     public function getGroupsWithMarketForUser(int $userId): array
     {
-        $groups = \App\Models\VkGroup::all();
+        $groups = VkGroup::all();
 
         return $groups->pluck('group_id')->toArray();
     }

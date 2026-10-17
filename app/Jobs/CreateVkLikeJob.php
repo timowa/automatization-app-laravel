@@ -11,7 +11,7 @@ use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
-use App\Services\VK\VkApiService;
+use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -31,16 +31,13 @@ class CreateVkLikeJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId
-    )
-    {
-    }
+    ) {}
 
     public function handle(
         VkApiService $vkApi,
         PublicationTaskDependencyResolver $taskDependencyResolver,
         TaskDispatcher $taskDispatcher,
-    ): void
-    {
+    ): void {
         $task = PublicationTask::findOrFail($this->taskId);
 
         if ($task->status !== PublicationTaskStatus::QUEUED) {
@@ -54,12 +51,12 @@ class CreateVkLikeJob implements ShouldQueue
             $postId = $parentTask->external_id;
             $post = VkWallPost::find($postId);
 
-            if (!$post) {
+            if (! $post) {
                 throw new NotFoundException('Пост не найден');
             }
 
             $offer = $post->offer;
-            if (!$offer) {
+            if (! $offer) {
                 throw new NotFoundException('Оффер не найден');
             }
 
@@ -67,7 +64,7 @@ class CreateVkLikeJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
-            if (!$vkUser || $vkUser->getToken() === '') {
+            if (! $vkUser || $vkUser->getToken() === '') {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -87,14 +84,14 @@ class CreateVkLikeJob implements ShouldQueue
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка лайка поста по офферу', ['task_id' => $this->taskId]);
-        } catch (VkApiException $e) {
+        } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage(),
                 'description' => $e->getDescription(),
-                'vk_error' => $e->getError()
+                'vk_error' => $e->getError(),
             ]);
             Log::channel('job')->warning('Ошибка лайка поста по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
@@ -103,7 +100,7 @@ class CreateVkLikeJob implements ShouldQueue
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
             Log::channel('job')->warning('Ошибка лайка поста по офферу', ['task_id' => $this->taskId]);
         }

@@ -113,7 +113,7 @@ class UploadVkImagesJob implements ShouldQueue
                     }
 
                     $attempts[$image->id]++;
-                    Log::channel('job')->info('Загрузка изображения', [
+                    Log::channel('vk-images')->info('Загрузка изображения', [
                         'offer' => $offer->code,
                         'image_id' => $image->id,
                         'attempt' => $attempts[$image->id],
@@ -173,10 +173,10 @@ class UploadVkImagesJob implements ShouldQueue
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка загрузки изображений оффера', ['task_id' => $this->taskId]);
-            Log::channel('vk')->warning($e->getMessage());
+            Log::channel('vk-images')->warning($e->getMessage(), ['task_id' => $this->taskId]);
         } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
-            Log::channel('vk')->error($e->getMessage(), [
+            Log::channel('vk-images')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage(),
@@ -186,7 +186,7 @@ class UploadVkImagesJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка загрузки изображений оффера', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
-            Log::channel('vk')->error($e->getMessage(), [
+            Log::channel('vk-images')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),

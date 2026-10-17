@@ -5,11 +5,15 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Enums\Deal;
+use App\Exceptions\StoryPublicationSkippedException;
+use App\Exceptions\VkStoryNotSavedException;
+use App\Interfaces\VkStoriesTemplateInterface;
 use App\Models\VkLoopStory;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Services\Vk\Stories\Templates\RentStoriesTemplate;
 use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
+use App\Services\Vk\Stories\VkStoriesContext;
 use App\Services\Vk\Stories\VkStoriesContextFactory;
 use App\Services\Vk\Stories\VkStoriesGenerator;
 use App\Services\Vk\VkApiService;
@@ -20,6 +24,7 @@ use Illuminate\Support\Facades\Log;
 class PublishLoopStoriesCommand extends Command
 {
     protected $signature = 'vk:publish-loop-stories';
+
     protected $description = 'Публикация активных loop-историй раз в 3 дня';
 
     public function handle(VkApiService $vkApi): int
@@ -36,21 +41,23 @@ class PublishLoopStoriesCommand extends Command
 
         if ($loopStories->isEmpty()) {
             $this->info('Нет активных loop-историй для публикации');
+
             return self::SUCCESS;
         }
 
         foreach ($loopStories as $loopStory) {
             try {
                 $offer = $loopStory->offer;
-                if (!$offer) {
+                if (! $offer) {
                     continue;
                 }
 
                 $post = VkWallPost::where('offer_id', $offer->id)->first();
-                if (!$post) {
+                if (! $post) {
                     Log::channel('job')->warning('Не найден пост для loop-истории', [
                         'offer_id' => $offer->id,
                     ]);
+
                     continue;
                 }
 
@@ -58,26 +65,39 @@ class PublishLoopStoriesCommand extends Command
                 /** @var VkUser|null $vkUser */
                 $vkUser = $agent?->vkUser;
 
-                if (!$vkUser || $vkUser->getToken() === '') {
-                    Log::channel('job')->warning('Не задан токен для loop-истории', [
+                if (! $vkUser || $vkUser->getToken() === '' || ! $vkUser->is_token_available) {
+                    Log::channel('vk')->warning('Публикация повторной истории пропущена: нет действующего доступа к странице', [
+                        'loop_story_id' => $loopStory->id,
                         'offer_id' => $offer->id,
                     ]);
+                    $loopStory->update(['last_published_at' => now()]);
+
                     continue;
                 }
 
                 $vkApi->setToken($vkUser->getToken());
 
-                $context = (new VkStoriesContextFactory())->getContext((int) $post->id);
+                $context = (new VkStoriesContextFactory)->getContext((int) $post->id);
                 $template = $this->resolveTemplate($context);
-                $image = (new VkStoriesGenerator())->generate($context, $template);
+                $image = (new VkStoriesGenerator)->generate($context, $template);
 
-                $res = $vkApi->storiesPost($post->getFullId(), $image);
+                try {
+                    $res = $vkApi->storiesPost($post->getFullId(), $image);
 
-                if (($res['count'] ?? 0) < 1) {
-                    throw new \RuntimeException(json_encode($res, JSON_UNESCAPED_UNICODE));
+                    if (($res['count'] ?? 0) < 1) {
+                        throw new VkStoryNotSavedException(
+                            'ВКонтакте не сохранил историю (count = 0). Ответ загрузки: '
+                            .json_encode($res, JSON_UNESCAPED_UNICODE)
+                        );
+                    }
+                } finally {
+                    if (is_string($image) && $image !== '' && is_file($image)) {
+                        try {
+                            unlink($image);
+                        } catch (\Throwable) {
+                        }
+                    }
                 }
-
-                unlink($image);
 
                 $loopStory->update(['last_published_at' => now()]);
 
@@ -86,27 +106,51 @@ class PublishLoopStoriesCommand extends Command
                     'post_id' => $post->id,
                 ]);
             } catch (\Throwable $e) {
-                Log::channel('job')->warning('Ошибка переопубликации loop-истории', [
-                    'loop_story_id' => $loopStory->id,
-                ]);
-                Log::channel('vk')->error($e->getMessage(), [
-                    'loop_story_id' => $loopStory->id,
-                ]);
+                if ($this->shouldPostponeLoopRetry($e)) {
+                    $loopStory->update(['last_published_at' => now()]);
+                    Log::channel('vk')->warning($e->getMessage(), [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                    Log::channel('job')->warning('Повторная публикация истории пропущена', [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                } else {
+                    Log::channel('job')->warning('Ошибка переопубликации loop-истории', [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                    Log::channel('vk')->error($e->getMessage(), [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                }
             }
 
             usleep(350_000);
         }
 
         $this->info('Переопубликация loop-историй завершена');
+
         return self::SUCCESS;
     }
 
-    private function resolveTemplate(\App\Services\Vk\Stories\VkStoriesContext $context): \App\Interfaces\VkStoriesTemplateInterface
+    private function shouldPostponeLoopRetry(\Throwable $e): bool
+    {
+        if ($e instanceof VkStoryNotSavedException) {
+            return false;
+        }
+
+        $message = $e->getMessage();
+
+        return $e instanceof StoryPublicationSkippedException
+            || str_contains($message, '404')
+            || str_contains($message, 'User authorization failed');
+    }
+
+    private function resolveTemplate(VkStoriesContext $context): VkStoriesTemplateInterface
     {
         return match ($context->deal) {
-            Deal::SALE => new SaleStoriesTemplate(),
-            Deal::RENT_OUT => new RentStoriesTemplate(),
-            default => throw new \RuntimeException('Неподдерживаемый тип сделки для истории: ' . $context->getDeal()),
+            Deal::SALE => new SaleStoriesTemplate,
+            Deal::RENT_OUT => new RentStoriesTemplate,
+            default => throw new \RuntimeException('Неподдерживаемый тип сделки для истории: '.$context->getDeal()),
         };
     }
 }

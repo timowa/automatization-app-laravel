@@ -260,4 +260,49 @@ class BirthdayWishesTest extends TestCase
 
         $this->assertSame([], $fake->calls);
     }
+
+    public function test_wish_job_continues_with_other_friends_when_one_closed_messages(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-16'));
+
+        $agent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'wish_happy_birthday_male' => true,
+            'birthday_wish_male_text' => 'С днём рождения',
+        ]);
+
+        foreach ([701, 702] as $userId) {
+            AgentVkFriend::query()->create([
+                'agent_id' => $agent->id,
+                'user_id' => $userId,
+                'bdate' => '1990-10-16',
+                'first_name' => 'Иван',
+                'last_name' => 'Иванов',
+                'sex' => Sex::MALE->value,
+            ]);
+        }
+
+        $fake = new FakeVkApiService;
+        $fake->setFailNext('RuntimeException', 'Access denied: no access to call this method');
+
+        (new WishHappyBirthdayJob($agent->id, 701))->handle($fake);
+        (new WishHappyBirthdayJob($agent->id, 702))->handle($fake);
+
+        $sent = array_values(array_filter(
+            $fake->calls,
+            fn (array $call): bool => $call['method'] === 'sendDirectMessage'
+        ));
+        $this->assertSame([701, 702], array_column($sent, 'user_id'));
+
+        $closed = AgentVkFriend::query()->where('agent_id', $agent->id)->where('user_id', 701)->first();
+        $opened = AgentVkFriend::query()->where('agent_id', $agent->id)->where('user_id', 702)->first();
+        $this->assertNull($closed?->last_birthday_wish_at);
+        $this->assertSame('2026-10-16', $opened?->last_birthday_wish_at?->toDateString());
+    }
 }

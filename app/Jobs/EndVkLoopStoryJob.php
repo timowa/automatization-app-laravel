@@ -7,9 +7,9 @@ namespace App\Jobs;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
+use App\Models\Offer;
 use App\Models\PublicationTask;
 use App\Models\VkLoopStory;
-use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -29,9 +29,7 @@ class EndVkLoopStoryJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId
-    )
-    {
-    }
+    ) {}
 
     public function handle(
         PublicationTaskDependencyResolver $taskDependencyResolver,
@@ -46,37 +44,34 @@ class EndVkLoopStoryJob implements ShouldQueue
         try {
             $task->update(['status' => PublicationTaskStatus::PROCESSING]);
 
-            $parentTask = $task->parentTask;
-            $postId = $parentTask->external_id;
-            $post = VkWallPost::find($postId);
-
-            if (!$post) {
-                throw new NotFoundException('Пост не найден');
-            }
-
-            $offer = $post->offer;
-            if (!$offer) {
+            $offer = $task->publication?->offer;
+            if (! $offer) {
                 throw new NotFoundException('Оффер не найден');
             }
 
-            $loopStory = VkLoopStory::where('offer_id', $offer->id)
-                ->where('is_active', true)
-                ->first();
+            $offerIds = Offer::query()
+                ->where('code', $offer->code)
+                ->pluck('id');
 
-            if ($loopStory) {
-                $loopStory->update(['is_active' => false]);
-            }
+            VkLoopStory::query()
+                ->whereIn('offer_id', $offerIds)
+                ->where('is_active', true)
+                ->update(['is_active' => false]);
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);
 
             Log::channel('job')->info('Loop-история по офферу остановлена', [
                 'offer_id' => $offer->id,
+                'code' => $offer->code,
             ]);
 
             $taskDependencyResolver->release($this->taskId);
             $taskDispatcher->dispatch($task->publication_id);
         } catch (\Throwable $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->error($e->getMessage(), [
+                'task_id' => $this->taskId,
+            ]);
             Log::channel('job')->warning('Ошибка остановки loop-истории по офферу', ['task_id' => $this->taskId]);
         }
     }

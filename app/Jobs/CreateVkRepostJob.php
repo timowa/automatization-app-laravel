@@ -33,13 +33,11 @@ class CreateVkRepostJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId
-    )
-    {
-    }
+    ) {}
 
     public function handle(VkApiService $vkApi,
-                           PublicationTaskDependencyResolver $taskDependencyResolver,
-                           TaskDispatcher $taskDispatcher): void
+        PublicationTaskDependencyResolver $taskDependencyResolver,
+        TaskDispatcher $taskDispatcher): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
@@ -53,12 +51,12 @@ class CreateVkRepostJob implements ShouldQueue
             $parentTask = $task->parentTask;
             $postId = $parentTask->external_id;
             $post = VkWallPost::find($postId);
-            if (!$post) {
+            if (! $post) {
                 throw new NotFoundException('Пост не найден');
             }
 
             $offer = $post->offer;
-            if (!$offer) {
+            if (! $offer) {
                 throw new NotFoundException('Оффер для поста не найден');
             }
 
@@ -70,6 +68,7 @@ class CreateVkRepostJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
@@ -89,20 +88,42 @@ class CreateVkRepostJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
             $agent = $offer->agent;
+            if ($agent === null) {
+                throw new NotFoundException('Для агента не задан токен');
+            }
+
             /** @var VkUser|null $vkUser */
-            $vkUser = $agent?->vkUser;
-            if (!$vkUser || $vkUser->getToken() === '') {
+            $vkUser = $agent->vkUser;
+            if (! $vkUser || $vkUser->getToken() === '') {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
             $groupIds = $groups->pluck('group_id')->toArray();
 
             $vkApi->setToken($vkUser->getToken());
-            $result = $vkApi->createReposts((int) $vkUser->vk_user_id, $post->getFullId(), $groupIds);
+            try {
+                $result = $vkApi->createReposts((int) $vkUser->vk_user_id, $post->getFullId(), $groupIds);
+            } catch (\Throwable $e) {
+                if ($e->getMessage() !== VkApiService::NO_REPOST_RIGHTS_MESSAGE) {
+                    throw $e;
+                }
+
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->warning('Репост не выполнен: нет групп, в которые пользователь имеет право постить', [
+                    'agent_id' => $agent->id,
+                    'vk_user_id' => $vkUser->vk_user_id,
+                    'group_ids' => array_values($groupIds),
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+
+                return;
+            }
 
             $successGroupIds = [];
 
@@ -112,6 +133,7 @@ class CreateVkRepostJob implements ShouldQueue
 
                 if (is_array($response) && isset($response['success']) && $response['success'] === 1) {
                     $successGroupIds[] = $groupId;
+
                     continue;
                 }
 
@@ -127,7 +149,7 @@ class CreateVkRepostJob implements ShouldQueue
             Log::channel('job')->info('Репосты по офферу выполнены', [
                 'offer' => $offer->code,
                 'post_id' => $post->id,
-                'group_ids' => $successGroupIds
+                'group_ids' => $successGroupIds,
             ]);
 
             $taskDependencyResolver->release($this->taskId);
@@ -135,14 +157,14 @@ class CreateVkRepostJob implements ShouldQueue
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
-        } catch (VkApiException $e) {
+        } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage(),
                 'description' => $e->getDescription(),
-                'vk_error' => $e->getError()
+                'vk_error' => $e->getError(),
             ]);
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
@@ -151,7 +173,7 @@ class CreateVkRepostJob implements ShouldQueue
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         }

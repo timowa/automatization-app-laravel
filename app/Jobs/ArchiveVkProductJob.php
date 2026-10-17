@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
+use App\Models\Offer;
 use App\Models\PublicationTask;
 use App\Models\VkProduct;
 use App\Models\VkUser;
@@ -32,13 +33,11 @@ class ArchiveVkProductJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId
-    )
-    {
-    }
+    ) {}
 
     public function handle(VkApiService $vkApi,
-                           PublicationTaskDependencyResolver $taskDependencyResolver,
-                           TaskDispatcher $taskDispatcher): void
+        PublicationTaskDependencyResolver $taskDependencyResolver,
+        TaskDispatcher $taskDispatcher): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
@@ -49,20 +48,14 @@ class ArchiveVkProductJob implements ShouldQueue
         try {
             $task->update(['status' => PublicationTaskStatus::PROCESSING]);
 
-            $parentTask = $task->parentTask;
-            $postId = $parentTask->external_id;
-            $post = VkWallPost::find($postId);
+            $offer = $this->resolveOffer($task);
 
-            if (!$post) {
-                throw new NotFoundException('Пост не найден');
-            }
+            $offerIds = Offer::query()
+                ->where('code', $offer->code)
+                ->pluck('id');
 
-            $offer = $post->offer;
-            if (!$offer) {
-                throw new NotFoundException('Оффер не найден');
-            }
-
-            $products = VkProduct::where('offer_id', $offer->id)
+            $products = VkProduct::query()
+                ->whereIn('offer_id', $offerIds)
                 ->where('is_archived', false)
                 ->get();
 
@@ -75,6 +68,7 @@ class ArchiveVkProductJob implements ShouldQueue
 
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
@@ -82,7 +76,7 @@ class ArchiveVkProductJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
-            if (!$vkUser || $vkUser->getToken() === '') {
+            if (! $vkUser || $vkUser->getToken() === '') {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -111,8 +105,8 @@ class ArchiveVkProductJob implements ShouldQueue
                 }
             }
 
-            VkProduct::where('offer_id', $offer->id)
-                ->where('is_archived', false)
+            VkProduct::query()
+                ->whereIn('id', $products->pluck('id'))
                 ->update(['is_archived' => true]);
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);
@@ -126,14 +120,14 @@ class ArchiveVkProductJob implements ShouldQueue
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
-        } catch (VkApiException $e) {
+        } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage(),
                 'description' => $e->getDescription(),
-                'vk_error' => $e->getError()
+                'vk_error' => $e->getError(),
             ]);
             Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
@@ -142,9 +136,33 @@ class ArchiveVkProductJob implements ShouldQueue
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
             Log::channel('job')->warning('Ошибка архивации товаров по офферу', ['task_id' => $this->taskId]);
         }
+    }
+
+    private function resolveOffer(PublicationTask $task): Offer
+    {
+        $parentTask = $task->parentTask;
+        if ($parentTask !== null) {
+            $post = VkWallPost::find($parentTask->external_id);
+            if (! $post) {
+                throw new NotFoundException('Пост не найден');
+            }
+
+            if (! $post->offer) {
+                throw new NotFoundException('Оффер не найден');
+            }
+
+            return $post->offer;
+        }
+
+        $offer = $task->publication?->offer;
+        if (! $offer) {
+            throw new NotFoundException('Оффер не найден');
+        }
+
+        return $offer;
     }
 }

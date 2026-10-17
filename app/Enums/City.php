@@ -36,6 +36,17 @@ enum City: int
     }
 
     /**
+     * @return string[]
+     */
+    public function aliases(): array
+    {
+        return match ($this) {
+            self::KYZYL => ['Кызылский кожуун'],
+            default => [],
+        };
+    }
+
+    /**
      * Города офферов, которые принимает группа с этим city.
      *
      * @return self[]

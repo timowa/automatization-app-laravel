@@ -7,8 +7,10 @@ namespace App\Jobs;
 use App\Enums\Deal;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
+use App\Exceptions\StoryPublicationSkippedException;
+use App\Exceptions\VkStoryNotSavedException;
 use App\Helpers\PublicationTaskDependencyResolver;
-use App\Models\Agent;
+use App\Interfaces\VkStoriesTemplateInterface;
 use App\Models\PublicationTask;
 use App\Models\VkLoopStory;
 use App\Models\VkUser;
@@ -16,6 +18,7 @@ use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
 use App\Services\Vk\Stories\Templates\RentStoriesTemplate;
 use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
+use App\Services\Vk\Stories\VkStoriesContext;
 use App\Services\Vk\Stories\VkStoriesContextFactory;
 use App\Services\Vk\Stories\VkStoriesGenerator;
 use App\Services\Vk\VkApiService;
@@ -38,13 +41,11 @@ class CreateVkLoopStoryJob implements ShouldQueue
 
     public function __construct(
         private readonly int $taskId
-    )
-    {
-    }
+    ) {}
 
     public function handle(VkApiService $vkApi,
-                           PublicationTaskDependencyResolver $taskDependencyResolver,
-                           TaskDispatcher $taskDispatcher): void
+        PublicationTaskDependencyResolver $taskDependencyResolver,
+        TaskDispatcher $taskDispatcher): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
@@ -59,12 +60,12 @@ class CreateVkLoopStoryJob implements ShouldQueue
             $postId = $parentTask->external_id;
             $post = VkWallPost::find($postId);
 
-            if (!$post) {
+            if (! $post) {
                 throw new NotFoundException('Пост не найден');
             }
 
             $offer = $post->offer;
-            if (!$offer) {
+            if (! $offer) {
                 throw new NotFoundException('Оффер не найден');
             }
 
@@ -72,23 +73,33 @@ class CreateVkLoopStoryJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
-            if (!$vkUser || $vkUser->getToken() === '') {
+            if (! $vkUser || $vkUser->getToken() === '') {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkStoriesContextFactory())->getContext((int) $post->id);
+            $context = (new VkStoriesContextFactory)->getContext((int) $post->id);
             $template = $this->resolveTemplate($context);
-            $image = (new VkStoriesGenerator())->generate($context, $template);
+            $image = (new VkStoriesGenerator)->generate($context, $template);
 
-            $res = $vkApi->storiesPost($post->getFullId(), $image);
+            try {
+                $res = $vkApi->storiesPost($post->getFullId(), $image);
 
-            if (($res['count'] ?? 0) < 1) {
-                throw new \RuntimeException(json_encode($res, JSON_UNESCAPED_UNICODE));
+                if (($res['count'] ?? 0) < 1) {
+                    throw new VkStoryNotSavedException(
+                        'ВКонтакте не сохранил историю (count = 0). Ответ загрузки: '
+                        .json_encode($res, JSON_UNESCAPED_UNICODE)
+                    );
+                }
+            } finally {
+                if (is_string($image) && $image !== '' && is_file($image)) {
+                    try {
+                        unlink($image);
+                    } catch (\Throwable) {
+                    }
+                }
             }
-
-            unlink($image);
 
             VkLoopStory::updateOrCreate(
                 ['offer_id' => $offer->id],
@@ -108,17 +119,25 @@ class CreateVkLoopStoryJob implements ShouldQueue
 
             $taskDependencyResolver->release($this->taskId);
             $taskDispatcher->dispatch($task->publication_id);
+        } catch (StoryPublicationSkippedException $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->warning($e->getMessage(), ['task_id' => $this->taskId]);
+            Log::channel('job')->warning('Публикация loop-истории пропущена', ['task_id' => $this->taskId]);
+        } catch (VkStoryNotSavedException $e) {
+            $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
+            Log::channel('vk')->error($e->getMessage(), ['task_id' => $this->taskId]);
+            Log::channel('job')->warning('Ошибка публикации loop-истории по офферу', ['task_id' => $this->taskId]);
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка публикации loop-истории по офферу', ['task_id' => $this->taskId]);
-        } catch (VkApiException $e) {
+        } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage(),
                 'description' => $e->getDescription(),
-                'vk_error' => $e->getError()
+                'vk_error' => $e->getError(),
             ]);
             Log::channel('job')->warning('Ошибка публикации loop-истории по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
@@ -127,18 +146,18 @@ class CreateVkLoopStoryJob implements ShouldQueue
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
             Log::channel('job')->warning('Ошибка публикации loop-истории по офферу', ['task_id' => $this->taskId]);
         }
     }
 
-    private function resolveTemplate(\App\Services\Vk\Stories\VkStoriesContext $context): \App\Interfaces\VkStoriesTemplateInterface
+    private function resolveTemplate(VkStoriesContext $context): VkStoriesTemplateInterface
     {
         return match ($context->deal) {
-            Deal::SALE => new SaleStoriesTemplate(),
-            Deal::RENT_OUT => new RentStoriesTemplate(),
-            default => throw new \RuntimeException('Неподдерживаемый тип сделки для истории: ' . $context->getDeal()),
+            Deal::SALE => new SaleStoriesTemplate,
+            Deal::RENT_OUT => new RentStoriesTemplate,
+            default => throw new \RuntimeException('Неподдерживаемый тип сделки для истории: '.$context->getDeal()),
         };
     }
 }

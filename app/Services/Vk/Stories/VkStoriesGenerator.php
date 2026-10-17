@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Vk\Stories;
 
+use App\Exceptions\StoryPublicationSkippedException;
+use App\Helpers\ImageWatermarker;
 use App\Interfaces\VkStoriesTemplateInterface;
 use Illuminate\Support\Facades\Log;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
@@ -14,52 +16,31 @@ use Throwable;
 
 class VkStoriesGenerator
 {
-    private const BANNER_TEMPLATE = __DIR__ . '/../../../../storage/app/assets/images/vkstory.png';
-    private const FONT_PATH = __DIR__ . '/../../../../storage/app/assets/fonts/ProximaNova.ttf';
-    private const FONT_BOLD_PATH = __DIR__ . '/../../../../storage/app/assets/fonts/ProximaNovaSemibold.ttf';
+    private const BANNER_TEMPLATE = __DIR__.'/../../../../storage/app/assets/images/vkstory.png';
+
+    private const FONT_PATH = __DIR__.'/../../../../storage/app/assets/fonts/ProximaNova.ttf';
+
+    private const FONT_BOLD_PATH = __DIR__.'/../../../../storage/app/assets/fonts/ProximaNovaSemibold.ttf';
 
     public function generate(VkStoriesContext $context, VkStoriesTemplateInterface $template): string
     {
-        if (!file_exists(self::BANNER_TEMPLATE)) {
-            throw new RuntimeException('Файл шаблона не найден по пути: ' . self::BANNER_TEMPLATE);
-        }
-
-        if (!file_exists(self::FONT_PATH)) {
-            throw new RuntimeException('Файл шрифта не найден по пути: ' . self::FONT_PATH);
-        }
-
-        $lines = explode("\n", $template->getDetails($context));
-        $price = $template->getPrice($context);
-
-        $manager = ImageManager::usingDriver(GdDriver::class);
-        $img = $manager->decodePath(self::BANNER_TEMPLATE);
-
-        $img->drawRectangle(function ($r) {
-            $r->at(0, 400);
-            $r->size(1080, 150);
-            $r->background('#ce1b21');
-        });
-
-        $img->text($price, 250, 510, function (FontFactory $font) {
-            $font->filename(self::FONT_BOLD_PATH);
-            $font->size(90);
-            $font->color('ffffff');
-        });
-
-        $y = 620;
-        foreach ($lines as $line) {
-            $img->text($line, 90, $y, function (FontFactory $font) {
-                $font->filename(self::FONT_BOLD_PATH);
-                $font->size(60);
-                $font->color('333333');
-                $font->align('left', 'top');
-            });
-            $y += 70;
-        }
+        $imagePath = null;
 
         try {
-            $url = $context->image;
-            $imageInfo = getimagesize($url);
+            $url = trim($context->image);
+            if ($url === '') {
+                throw new StoryPublicationSkippedException('У объекта нет фото, публикация истории пропущена');
+            }
+
+            $imageInfo = $this->readImageInfo($url);
+
+            if (! file_exists(self::BANNER_TEMPLATE)) {
+                throw new RuntimeException('Файл шаблона не найден по пути: '.self::BANNER_TEMPLATE);
+            }
+
+            if (! file_exists(self::FONT_PATH)) {
+                throw new RuntimeException('Файл шрифта не найден по пути: '.self::FONT_PATH);
+            }
 
             $extension = match ($imageInfo[2]) {
                 IMAGETYPE_JPEG => 'jpg',
@@ -76,27 +57,117 @@ class VkStoriesGenerator
                 $extension
             );
 
-            copy($url, $imagePath);
-            $imagePath = (new \App\Helpers\ImageWatermarker)->apply($imagePath);
+            if (! @copy($url, $imagePath)) {
+                throw new StoryPublicationSkippedException('Ссылка на фото недоступна, публикация истории пропущена');
+            }
+
+            $imagePath = (new ImageWatermarker)->apply($imagePath);
+
+            $lines = explode("\n", $template->getDetails($context));
+            $price = $template->getPrice($context);
+
+            $manager = ImageManager::usingDriver(GdDriver::class);
+            $img = $manager->decodePath(self::BANNER_TEMPLATE);
+
+            $img->drawRectangle(function ($r) {
+                $r->at(0, 400);
+                $r->size(1080, 150);
+                $r->background('#ce1b21');
+            });
+
+            $img->text($price, 250, 510, function (FontFactory $font) {
+                $font->filename(self::FONT_BOLD_PATH);
+                $font->size(90);
+                $font->color('ffffff');
+            });
+
+            $y = 620;
+            foreach ($lines as $line) {
+                $img->text($line, 90, $y, function (FontFactory $font) {
+                    $font->filename(self::FONT_BOLD_PATH);
+                    $font->size(60);
+                    $font->color('333333');
+                    $font->align('left', 'top');
+                });
+                $y += 70;
+            }
+
             $insertImage = $manager->decodePath($imagePath);
             $insertImage->cover(width: 900, height: 600);
             $img->insert($insertImage, 0, 200, 'center');
+
+            $fileName = sprintf(
+                storage_path('app/tmp/story_%s.jpg'),
+                uniqid()
+            );
+
+            $img->save($fileName);
+
+            return $fileName;
+        } catch (StoryPublicationSkippedException $e) {
+            throw $e;
         } catch (Throwable $e) {
-            Log::channel('vk')->error('Ошибка генерации изображения истории: ' . $e->getMessage());
+            if ($this->isUnavailableImageError($e)) {
+                $message = str_contains($e->getMessage(), '404')
+                    ? 'Ссылка на фото недоступна (404), публикация истории пропущена'
+                    : 'Ссылка на фото недоступна, публикация истории пропущена';
+
+                throw new StoryPublicationSkippedException($message, previous: $e);
+            }
+
+            Log::channel('vk')->error('Ошибка генерации изображения истории: '.$e->getMessage());
             throw $e;
         } finally {
-            if (file_exists($imagePath)) {
-                unlink($imagePath);
-            }
+            $this->deleteTemporaryImage($imagePath);
+        }
+    }
+
+    /**
+     * @return array{0: int, 1: int, 2: int, 3: string, mime: string, channels?: int, bits?: int}
+     */
+    private function readImageInfo(string $url): array
+    {
+        $warning = null;
+        set_error_handler(static function (int $severity, string $message) use (&$warning): bool {
+            $warning = $message;
+
+            return true;
+        });
+
+        try {
+            $imageInfo = getimagesize($url);
+        } finally {
+            restore_error_handler();
         }
 
-        $fileName = sprintf(
-            storage_path('app/tmp/story_%s.jpg'),
-            uniqid()
-        );
+        if (! is_array($imageInfo) || ! isset($imageInfo[2])) {
+            $message = is_string($warning) && str_contains($warning, '404')
+                ? 'Ссылка на фото недоступна (404), публикация истории пропущена'
+                : 'Ссылка на фото недоступна, публикация истории пропущена';
 
-        $img->save($fileName);
+            throw new StoryPublicationSkippedException($message);
+        }
 
-        return $fileName;
+        return $imageInfo;
+    }
+
+    private function isUnavailableImageError(Throwable $e): bool
+    {
+        $message = $e->getMessage();
+
+        return str_contains($message, '404')
+            || str_contains($message, 'failed to open stream');
+    }
+
+    private function deleteTemporaryImage(mixed $imagePath): void
+    {
+        if (! is_string($imagePath) || $imagePath === '' || ! file_exists($imagePath)) {
+            return;
+        }
+
+        try {
+            unlink($imagePath);
+        } catch (Throwable) {
+        }
     }
 }

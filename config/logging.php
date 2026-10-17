@@ -60,6 +60,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'vk-images' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/vk/images/error.log'),
+            'level' => 'info',
+            'days' => 7,
+            'replace_placeholders' => true,
+        ],
+
         'check_tokens' => [
             'driver' => 'daily',
             'path' => storage_path('logs/vk/tokens/error.log'),

@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\AdminAuthMiddleware;
+use App\Http\Middleware\ApiKeyMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -11,13 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
     )
-    ->withSchedule(function (\Illuminate\Console\Scheduling\Schedule $schedule): void {
-        $schedule->command('vk:publish-loop-stories')->dailyAt('10:00');
-    })
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
-            'admin' => \App\Http\Middleware\AdminAuthMiddleware::class,
-            'api_key' => \App\Http\Middleware\ApiKeyMiddleware::class,
+            'admin' => AdminAuthMiddleware::class,
+            'api_key' => ApiKeyMiddleware::class,
         ]);
         $middleware->preventRequestForgery(except: [
             'offer',

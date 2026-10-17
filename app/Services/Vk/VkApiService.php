@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace App\Services\Vk;
 
+use App\Exceptions\VkStoryNotSavedException;
+use App\Helpers\ImageWatermarker;
 use Exception;
 use GuzzleHttp\Client;
-use http\Exception\RuntimeException;
 use Illuminate\Support\Facades\Log;
 use VK\Client\Enums\VKLanguage;
 use VK\Client\VKApiClient;
 use VK\Exceptions\Api\VKApiAccessGroupsException;
-use VK\Exceptions\Api\VKApiCaptchaException;
 use VK\Exceptions\Api\VKApiWallAddPostException;
 use VK\Exceptions\Api\VKApiWallAdsPostLimitReachedException;
 use VK\Exceptions\Api\VKApiWallAdsPublishedException;
@@ -23,6 +23,8 @@ use VK\Exceptions\VKClientException;
 
 class VkApiService
 {
+    public const NO_REPOST_RIGHTS_MESSAGE = 'Не найдено групп, в которые пользователь имеет право постить';
+
     public const FRIEND_FIELDS = [
         'bdate',
         'city',
@@ -60,6 +62,7 @@ class VkApiService
     ];
 
     protected string $token;
+
     protected VKApiClient $client;
 
     public function setToken(string $token): void
@@ -85,7 +88,7 @@ class VkApiService
             'message' => $message,
             'attachments' => $attachments,
             'close_comments' => 0,
-            'primary_attachments_mode' => 'grid'
+            'primary_attachments_mode' => 'grid',
         ]);
 
         return $result;
@@ -99,39 +102,39 @@ class VkApiService
     public function uploadWallPhoto(string $imageUrl, int $ownerId, string $caption = ''): ?int
     {
         $filename = null;
-        $imageWatermarker = new \App\Helpers\ImageWatermarker;
+        $imageWatermarker = new ImageWatermarker;
         try {
             $filename = downloadFile($imageUrl, storage_path('app/tmp'));
             $imageInfo = @getimagesize($filename);
-            Log::channel('job')->info('Файл изображения скачан через CURL', ['file_name' => $filename, 'image_info' => $imageInfo]);
+            Log::channel('vk-images')->info('Файл изображения скачан через CURL', ['file_name' => $filename, 'image_info' => $imageInfo]);
             $filename = $imageWatermarker->apply($filename);
 
             $address = $this->client->photos()->getWallUploadServer($this->token);
-            Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
+            Log::channel('vk-images')->info('Получен адрес для загрузки изображения', ['address' => $address]);
 
             $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
-            Log::channel('job')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
+            Log::channel('vk-images')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
                 'upload_url' => $address['upload_url'],
                 'parameter_name' => 'photo',
-                'path' => $filename
+                'path' => $filename,
             ]]);
 
             if (empty($photo['photo'])) {
-                Log::channel('job')->warning('Не удалось загрузить файл скачанный через CURL. Пробуем сохранить через GD');
+                Log::channel('vk-images')->warning('Не удалось загрузить файл скачанный через CURL. Пробуем сохранить через GD');
 
                 $filename = downloadFileGD($imageUrl, storage_path('app/tmp'));
                 $imageInfo = @getimagesize($filename);
-                Log::channel('job')->info('Файл изображения скачан через CURL и сохранен через GD', ['file_name' => $filename, 'image_info' => $imageInfo]);
+                Log::channel('vk-images')->info('Файл изображения скачан через CURL и сохранен через GD', ['file_name' => $filename, 'image_info' => $imageInfo]);
                 $filename = $imageWatermarker->apply($filename);
 
                 $address = $this->client->photos()->getWallUploadServer($this->token);
-                Log::channel('job')->info('Получен адрес для загрузки изображения', ['address' => $address]);
+                Log::channel('vk-images')->info('Получен адрес для загрузки изображения', ['address' => $address]);
 
                 $photo = $this->client->getRequest()->upload($address['upload_url'], 'photo', $filename);
-                Log::channel('job')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
+                Log::channel('vk-images')->info('Ответ вк по загрузке изображения', ['response' => $photo, 'params' => [
                     'upload_url' => $address['upload_url'],
                     'parameter_name' => 'photo',
-                    'path' => $filename
+                    'path' => $filename,
                 ]]);
 
             }
@@ -145,20 +148,20 @@ class VkApiService
                 'photo' => $photo['photo'],
                 'hash' => $photo['hash'],
                 'user_id' => $ownerId,
-                'caption' => $caption
+                'caption' => $caption,
             ]);
 
-            Log::channel('job')->info('Ответ вк по сохранению изображения', ['response' => $saveResponse, 'params' => [
+            Log::channel('vk-images')->info('Ответ вк по сохранению изображения', ['response' => $saveResponse, 'params' => [
                 'server' => $photo['server'],
                 'photo' => $photo['photo'],
                 'hash' => $photo['hash'],
                 'user_id' => $ownerId,
-                'caption' => $caption
+                'caption' => $caption,
             ]]);
 
             return (int) $saveResponse[0]['id'];
         } catch (\Throwable $th) {
-            Log::channel('vk')->error('Ошибка при загрузке фотографии на сервер Вконтакте: ' . $th->getMessage(), [
+            Log::channel('vk-images')->error('Ошибка при загрузке фотографии на сервер Вконтакте: '.$th->getMessage(), [
                 'image_original_url' => $imageUrl,
                 'image_local_name' => $filename,
             ]);
@@ -175,15 +178,53 @@ class VkApiService
     {
         $address = $this->client->stories()->getPhotoUploadServer($this->token, [
             'add_to_news' => 1,
-            'link_url' => 'https://vk.com/wall' . $postId,
+            'link_url' => 'https://vk.com/wall'.$postId,
             'link_text' => 'Смотреть',
         ]);
 
         $upload = $this->client->getRequest()->upload($address['upload_url'], 'photo', $imagePath);
 
-        return $this->client->stories()->save($this->token, [
-            'upload_results' => $upload['upload_result'],
+        $saved = $this->client->stories()->save($this->token, [
+            'upload_results' => is_array($upload) ? ($upload['upload_result'] ?? null) : null,
         ]);
+
+        if (($saved['count'] ?? 0) < 1) {
+            $uploadSafe = $this->redactSecrets(is_array($upload) ? $upload : ['response' => $upload]);
+
+            throw new VkStoryNotSavedException(
+                'ВКонтакте не сохранил историю (count = 0). Ответ загрузки: '
+                .json_encode($uploadSafe, JSON_UNESCAPED_UNICODE)
+            );
+        }
+
+        return $saved;
+    }
+
+    private function redactSecrets(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            $clean = [];
+            foreach ($value as $key => $item) {
+                if (is_string($key) && preg_match('/token|secret/i', $key) === 1) {
+                    continue;
+                }
+
+                $clean[$key] = $this->redactSecrets($item);
+            }
+
+            return $clean;
+        }
+
+        if (! is_string($value)) {
+            return $value;
+        }
+
+        $token = $this->token ?? '';
+        if ($token !== '' && str_contains($value, $token)) {
+            $value = str_replace($token, '[hidden]', $value);
+        }
+
+        return preg_replace('/((?:access_)?token)=([^&\s]+)/i', '$1=[hidden]', $value) ?? $value;
     }
 
     /**
@@ -202,11 +243,11 @@ class VkApiService
         $userGroups = array_filter($userGroupsResponse['items'], fn ($groupId) => in_array($groupId, $groupIds));
 
         if (count($userGroups) < 1) {
-            throw new Exception('Не найдено групп, в которые пользователь имеет право постить');
+            throw new Exception(self::NO_REPOST_RIGHTS_MESSAGE);
         }
 
         $groupIdsJson = json_encode(array_values($userGroups));
-        $postId = 'wall' . $postId;
+        $postId = 'wall'.$postId;
 
         $code = <<<VKSCRIPT
         var groups = {$groupIdsJson};
@@ -238,6 +279,7 @@ VKSCRIPT;
         if (empty($postIds)) {
             return [];
         }
+
         return $this->client->wall()->getById($this->token, [
             'posts' => implode(',', $postIds),
         ]);
@@ -386,8 +428,9 @@ VKSCRIPT;
     {
         $address = $this->client->getRequest()->post('market.getProductPhotoUploadServer', $this->token, [
             'group_id' => $groupId,
-            'bulk' => true
+            'bulk' => true,
         ]);
+
         return $address['upload_url'];
     }
 
@@ -446,42 +489,43 @@ VKSCRIPT;
                     ? $image
                     : downloadFile($image, storage_path('app/tmp'));
 
-                $filename = (new \App\Helpers\ImageWatermarker)->apply($filename);
+                $filename = (new ImageWatermarker)->apply($filename);
 
                 if (is_file($image) === false) {
                     $files[] = $filename;
                 }
                 $multipart[] = [
                     'name' => $i === 0 ? 'file' : "file{$i}",
-                    'contents' => fopen($filename, 'rb')
+                    'contents' => fopen($filename, 'rb'),
                 ];
 
             } catch (\Throwable $th) {
-                Log::channel('vk')->error('Ошибка при получении изображения: ' . $th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
+                Log::channel('vk-images')->error('Ошибка при получении изображения: '.$th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
+
                 continue;
             }
         }
         try {
-            $client = new Client();
+            $client = new Client;
             $response = $client->post($address, [
-                'multipart' => $multipart
+                'multipart' => $multipart,
             ]);
             $res = $response->getBody()->getContents();
 
             $saveResponse = $client->post('https://api.vk.com/method/market.saveProductPhotoBulk', [
                 'headers' => [
-                    'Authorization' => 'Bearer ' . $this->token,
+                    'Authorization' => 'Bearer '.$this->token,
                 ],
                 'multipart' => [
                     [
                         'name' => 'upload_response',
-                        'contents' => $res
+                        'contents' => $res,
                     ],
                     [
                         'name' => 'v',
-                        'contents' => '5.199'
-                    ]
-                ]
+                        'contents' => '5.199',
+                    ],
+                ],
             ]);
 
             $res = json_decode(
@@ -493,9 +537,8 @@ VKSCRIPT;
             $attachments = array_column($res['response'], 'photo_id');
 
         } catch (\Throwable $th) {
-            Log::channel('vk')->error('Ошибка при загрузке изображения: ' . $th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
+            Log::channel('vk-images')->error('Ошибка при загрузке изображения: '.$th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
         }
-
 
         foreach ($files as $file) {
             unlink($file);
@@ -520,7 +563,7 @@ VKSCRIPT;
             'photo' => $mainPhotoId,
             'main_photo_id' => $mainPhotoId,
             'photo_ids' => $photoIdsStr,
-            'owner_id' => '-' . $groupId,
+            'owner_id' => '-'.$groupId,
         ]);
 
         return $res;
