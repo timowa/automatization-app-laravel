@@ -18,6 +18,10 @@ class FakeVkApiService extends VkApiService
 
     public ?string $failMessage = 'VK API error';
 
+    public int $failErrorCode = 1;
+
+    public int $failTimes = 0;
+
     public array $storiesPostResponse = ['count' => 1];
 
     public bool $noRepostRights = false;
@@ -27,9 +31,11 @@ class FakeVkApiService extends VkApiService
     /** @var array<int, string> */
     public array $friendListsResponse = [];
 
-    public function setFailNext(string $exceptionClass, string $message = 'VK API error'): void
+    public function setFailNext(string $exceptionClass, string $message = 'VK API error', int $errorCode = 1, int $times = 1): void
     {
         $this->failNext = true;
+        $this->failTimes = max(1, $times);
+        $this->failErrorCode = $errorCode;
         $this->failWith = 'VK\\Exceptions\\'.ltrim($exceptionClass, '\\');
         $this->failMessage = $message;
     }
@@ -48,13 +54,18 @@ class FakeVkApiService extends VkApiService
             return;
         }
 
-        $this->failNext = false;
+        if ($this->failTimes > 1) {
+            $this->failTimes--;
+        } else {
+            $this->failNext = false;
+            $this->failTimes = 0;
+        }
 
         if (is_a($this->failWith, VKApiException::class, true)) {
             throw new VKApiException(
-                1,
+                $this->failErrorCode,
                 $this->failMessage,
-                new VKApiError(['error_code' => 1, 'error_msg' => $this->failMessage])
+                new VKApiError(['error_code' => $this->failErrorCode, 'error_msg' => $this->failMessage])
             );
         }
 

@@ -409,6 +409,37 @@ class AgentVkFriendsTest extends TestCase
         $this->assertSame('0 2 * * 1', $event->expression);
     }
 
+    public function test_friends_sync_retries_connection_timeout(): void
+    {
+        $agent = Agent::factory()->create();
+        $vkUser = VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'friends_synced_at' => null,
+        ]);
+
+        $fake = new FakeVkApiService;
+        $fake->setFailNext(
+            'RuntimeException',
+            'cURL error 28: Operation timed out after 10001 milliseconds with 0 bytes received',
+        );
+        $fake->friendsResponse = [[
+            'id' => 42,
+            'first_name' => 'Пётр',
+            'last_name' => 'Петров',
+        ]];
+        $this->app->instance(VkApiService::class, $fake);
+
+        $action = $this->app->make(SyncAgentVkFriendsAction::class);
+
+        $this->assertSame(1, $action->execute($vkUser));
+        $calls = array_values(array_filter(
+            $fake->calls,
+            fn (array $call): bool => $call['method'] === 'getFriends',
+        ));
+        $this->assertCount(2, $calls);
+        $this->assertDatabaseHas('agents_vk_friends', ['user_id' => 42]);
+    }
+
     /**
      * @param  array<string, mixed>  $attributes
      */

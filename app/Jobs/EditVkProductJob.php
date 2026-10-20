@@ -76,7 +76,14 @@ class EditVkProductJob implements ShouldQueue
                 ->get();
 
             if ($products->isEmpty()) {
-                throw new NotFoundException('Товары не найдены');
+                $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+                Log::channel('job')->info('Товары по офферу не редактировались: товаров нет', [
+                    'offer' => $offer->code,
+                ]);
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+
+                return;
             }
 
             $batchProducts = $products->map(fn ($product) => [

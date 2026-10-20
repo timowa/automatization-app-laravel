@@ -10,6 +10,7 @@ use App\Enums\PublicationTaskType;
 use App\Helpers\JobResolver;
 use App\Helpers\PublicationTaskDependencyResolver;
 use App\Helpers\ScenarioVkPostTemplateResolver;
+use App\Helpers\VkApiErrorInspector;
 use App\Jobs\ArchiveVkProductJob;
 use App\Jobs\CreateVkCommentJob;
 use App\Jobs\CreateVkLikeJob;
@@ -154,6 +155,34 @@ class VkJobsTest extends TestCase
         $task = $task->fresh();
         $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
         $this->assertSame('VK blocked', $task->error);
+    }
+
+    public function test_create_vk_post_job_defers_on_flood_control(): void
+    {
+        $task = $this->createPostTask();
+        $this->vkApi->setFailNext('VKApiException', 'Flood control', 9);
+
+        $job = new CreateVkPostJob($task->id);
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::PROCESSING, $task->status);
+        $this->assertNull($task->error);
+        Queue::assertPushed(CreateVkPostJob::class);
+    }
+
+    public function test_create_vk_post_job_fails_after_repeated_flood_control(): void
+    {
+        $task = $this->createPostTask();
+        $task->update(['status' => PublicationTaskStatus::PROCESSING]);
+        $this->vkApi->setFailNext('VKApiException', 'Flood control', 9);
+
+        $job = new CreateVkPostJob($task->id, VkApiErrorInspector::FLOOD_MAX_ATTEMPTS - 1);
+        $job->handle($this->vkApi, ...$this->postJobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
+        Queue::assertNotPushed(CreateVkPostJob::class);
     }
 
     public function test_create_vk_repost_job_success(): void
@@ -658,6 +687,34 @@ class VkJobsTest extends TestCase
         $this->assertCount(1, $batchCalls);
     }
 
+    public function test_edit_vk_product_job_succeeds_when_products_are_missing(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        $publication = Publication::factory()->forOffer($offer)->create();
+        $post = VkWallPost::factory()->forOffer($offer->id)->create();
+        $parentTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->withStatus(PublicationTaskStatus::SUCCESS)
+            ->create();
+        $parentTask->update(['external_id' => (string) $post->id]);
+
+        $editTask = PublicationTask::factory()
+            ->for($publication)
+            ->ofType(PublicationTaskType::VK_EDIT_PRODUCT)
+            ->dependsOn($parentTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $job = new EditVkProductJob($editTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $editTask = $editTask->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $editTask->status);
+        $this->assertEmpty(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'editProductsBatch'));
+    }
+
     public function test_archive_vk_product_job_success(): void
     {
         $offer = Offer::factory()->create();
@@ -975,5 +1032,23 @@ class VkJobsTest extends TestCase
         $task = $task->fresh();
         $this->assertSame(PublicationTaskStatus::FAILED, $task->status);
         $this->assertStringContainsString('токен', $task->error ?? '');
+    }
+
+    public function test_upload_vk_images_job_defers_on_flood_control(): void
+    {
+        $task = $this->createUploadImagesTask();
+        OfferImage::factory()->create([
+            'offer_id' => $task->publication->offer_id,
+            'media_id' => null,
+        ]);
+        $this->vkApi->setFailNext('VKApiException', 'Flood control', 9);
+
+        $job = new UploadVkImagesJob($task->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $task = $task->fresh();
+        $this->assertSame(PublicationTaskStatus::PROCESSING, $task->status);
+        $this->assertNull($task->error);
+        Queue::assertPushed(UploadVkImagesJob::class);
     }
 }

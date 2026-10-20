@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
+use App\Jobs\Concerns\DefersVkFloodControlledTask;
 use App\Models\Agent;
 use App\Models\OfferImage;
 use App\Models\PublicationTask;
@@ -24,6 +25,7 @@ use VK\Exceptions\VKApiException;
 
 class UploadVkImagesJob implements ShouldQueue
 {
+    use DefersVkFloodControlledTask;
     use Dispatchable;
     use InteractsWithQueue;
     use Queueable;
@@ -32,12 +34,13 @@ class UploadVkImagesJob implements ShouldQueue
     public int $tries = 1;
 
     private const MAX_ATTEMPTS_PER_IMAGE = 3;
+
     private const RETRY_DELAY_MICROSECONDS = 500000;
 
     public function __construct(
         private readonly int $taskId,
-    ) {
-    }
+        private readonly int $floodAttempt = 0,
+    ) {}
 
     public function handle(
         VkApiService $vkApi,
@@ -46,7 +49,7 @@ class UploadVkImagesJob implements ShouldQueue
     ): void {
         $task = PublicationTask::findOrFail($this->taskId);
 
-        if ($task->status !== PublicationTaskStatus::QUEUED) {
+        if (! $this->shouldHandleTask($task)) {
             return;
         }
 
@@ -55,7 +58,7 @@ class UploadVkImagesJob implements ShouldQueue
 
             $task->load('publication.offer');
             $offer = $task->publication->offer;
-            if (!$offer) {
+            if (! $offer) {
                 throw new NotFoundException('Оффер не найден');
             }
 
@@ -64,7 +67,7 @@ class UploadVkImagesJob implements ShouldQueue
             /** @var VkUser|null $vkUser */
             $vkUser = $agent->vkUser;
 
-            if (!$agent || !$vkUser) {
+            if (! $agent || ! $vkUser) {
                 throw new NotFoundException('Не найдены данные агента');
             }
 
@@ -74,7 +77,7 @@ class UploadVkImagesJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkPostContextFactory())->getContext($offer->id);
+            $context = (new VkPostContextFactory)->getContext($offer->id);
             $imageCaption = $context->getImageCaption();
 
             $pendingImages = OfferImage::where('offer_id', $offer->id)
@@ -89,6 +92,7 @@ class UploadVkImagesJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
@@ -100,7 +104,7 @@ class UploadVkImagesJob implements ShouldQueue
 
             $allUploaded = false;
 
-            while (!$allUploaded) {
+            while (! $allUploaded) {
                 $allUploaded = true;
 
                 foreach ($pendingImages as $image) {
@@ -138,7 +142,7 @@ class UploadVkImagesJob implements ShouldQueue
                     usleep(self::RETRY_DELAY_MICROSECONDS);
                 }
 
-                if (!$allUploaded) {
+                if (! $allUploaded) {
                     $stillPending = array_filter($attempts, fn (int $a) => $a < self::MAX_ATTEMPTS_PER_IMAGE);
                     if (empty($stillPending)) {
                         break;
@@ -159,6 +163,7 @@ class UploadVkImagesJob implements ShouldQueue
                     'task_id' => $this->taskId,
                     'failed_count' => $failedImages,
                 ]);
+
                 return;
             }
 
@@ -175,6 +180,10 @@ class UploadVkImagesJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка загрузки изображений оффера', ['task_id' => $this->taskId]);
             Log::channel('vk-images')->warning($e->getMessage(), ['task_id' => $this->taskId]);
         } catch (VKApiException $e) {
+            if ($this->deferOnFlood($task, $e)) {
+                return;
+            }
+
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk-images')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
@@ -185,6 +194,10 @@ class UploadVkImagesJob implements ShouldQueue
             ]);
             Log::channel('job')->warning('Ошибка загрузки изображений оффера', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
+            if ($this->deferOnFlood($task, $e)) {
+                return;
+            }
+
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk-images')->error($e->getMessage(), [
                 'task_id' => $this->taskId,

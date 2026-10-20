@@ -6,6 +6,7 @@ namespace App\Services\Vk;
 
 use App\Exceptions\VkStoryNotSavedException;
 use App\Helpers\ImageWatermarker;
+use App\Helpers\VkApiErrorInspector;
 use Exception;
 use GuzzleHttp\Client;
 use Illuminate\Support\Facades\Log;
@@ -24,6 +25,8 @@ use VK\Exceptions\VKClientException;
 class VkApiService
 {
     public const NO_REPOST_RIGHTS_MESSAGE = 'Не найдено групп, в которые пользователь имеет право постить';
+
+    public const HTTP_TIMEOUT_SECONDS = 30;
 
     public const FRIEND_FIELDS = [
         'bdate',
@@ -69,6 +72,18 @@ class VkApiService
     {
         $this->token = $token;
         $this->client = new VKApiClient(config('vk.version', '5.199'), VKLanguage::RUSSIAN);
+        $this->extendHttpTimeout($this->client);
+    }
+
+    private function extendHttpTimeout(VKApiClient $client): void
+    {
+        $request = $client->getRequest();
+        $property = new \ReflectionProperty($request, 'client');
+        $property->setValue($request, new \VK\Transport\Client([
+            'base_uri' => 'https://api.vk.com/method',
+            'timeout' => self::HTTP_TIMEOUT_SECONDS,
+            'connect_timeout' => 10,
+        ]));
     }
 
     /**
@@ -166,6 +181,10 @@ class VkApiService
                 'image_local_name' => $filename,
             ]);
 
+            if (VkApiErrorInspector::isFlood($th)) {
+                throw $th;
+            }
+
             return null;
         } finally {
             if ($filename !== null && is_file($filename)) {
@@ -237,10 +256,10 @@ class VkApiService
     {
         $userGroupsResponse = $this->client->groups()->get($this->token, [
             'user_id' => $userId,
-            'filter' => 'moder',
+            'filter' => 'admin,editor,moder',
         ]);
 
-        $userGroups = array_filter($userGroupsResponse['items'], fn ($groupId) => in_array($groupId, $groupIds));
+        $userGroups = self::groupIdsUserCanPost($userGroupsResponse['items'] ?? [], $groupIds);
 
         if (count($userGroups) < 1) {
             throw new Exception(self::NO_REPOST_RIGHTS_MESSAGE);
@@ -272,6 +291,26 @@ VKSCRIPT;
         return $this->client->getRequest()->post('execute', $this->token, [
             'code' => $code,
         ]);
+    }
+
+    /**
+     * @param  list<int|string|array<string, mixed>>  $items
+     * @param  list<int|string>  $groupIds
+     * @return list<int>
+     */
+    public static function groupIdsUserCanPost(array $items, array $groupIds): array
+    {
+        $allowed = array_map(intval(...), $groupIds);
+        $matched = [];
+
+        foreach ($items as $item) {
+            $id = is_array($item) ? (int) ($item['id'] ?? 0) : (int) $item;
+            if ($id > 0 && in_array($id, $allowed, true)) {
+                $matched[] = $id;
+            }
+        }
+
+        return array_values(array_unique($matched));
     }
 
     public function getPostsStats(array $postIds): array

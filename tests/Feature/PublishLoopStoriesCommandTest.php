@@ -131,4 +131,45 @@ class PublishLoopStoriesCommandTest extends TestCase
         $this->assertCount(1, $events);
         $this->assertSame('0 10 * * *', $events[0]->expression);
     }
+
+    public function test_command_retries_connection_timeout_and_keeps_story_due(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        VkWallPost::factory()->forOffer($offer->id)->create();
+        OfferImage::factory()->create([
+            'offer_id' => $offer->id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
+        $story = VkLoopStory::factory()->create([
+            'offer_id' => $offer->id,
+            'is_active' => true,
+            'last_published_at' => null,
+        ]);
+
+        $vkApi = new FakeVkApiService;
+        $vkApi->setFailNext(
+            'RuntimeException',
+            'cURL error 28: Operation timed out after 10001 milliseconds with 0 bytes received',
+            1,
+            3,
+        );
+        $this->app->instance(VkApiService::class, $vkApi);
+
+        $this->artisan('vk:publish-loop-stories')->assertSuccessful();
+
+        $story = $story->fresh();
+        $this->assertNull($story->last_published_at);
+        $this->assertTrue($story->is_active);
+        $calls = array_values(array_filter(
+            $vkApi->calls,
+            fn (array $call): bool => $call['method'] === 'storiesPost',
+        ));
+        $this->assertCount(3, $calls);
+    }
 }

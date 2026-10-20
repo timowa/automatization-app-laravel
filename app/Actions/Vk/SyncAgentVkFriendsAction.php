@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Actions\Vk;
 
+use App\Helpers\VkApiErrorInspector;
 use App\Models\VkUser;
 use App\Services\Vk\VkApiService;
 use App\Services\Vk\VkFriendRowMapper;
@@ -81,7 +82,7 @@ final class SyncAgentVkFriendsAction
         }
 
         $this->vkApi->setToken($vkUser->getToken());
-        $friends = $this->vkApi->getFriends((int) $vkUser->vk_user_id);
+        $friends = $this->friendsWithTimeoutRetry((int) $vkUser->vk_user_id);
         $friendListNames = $this->friendListNames($vkUser);
         $now = now();
         $rows = [];
@@ -111,6 +112,29 @@ final class SyncAgentVkFriendsAction
         $vkUser->save();
 
         return count($rows);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function friendsWithTimeoutRetry(int $userId): array
+    {
+        $last = null;
+
+        for ($attempt = 1; $attempt <= VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS; $attempt++) {
+            try {
+                return $this->vkApi->getFriends($userId);
+            } catch (Throwable $e) {
+                $last = $e;
+                if (! VkApiErrorInspector::isTimeout($e) || $attempt === VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS) {
+                    throw $e;
+                }
+
+                usleep(350_000);
+            }
+        }
+
+        throw $last ?? new \RuntimeException('Не удалось получить список друзей');
     }
 
     /**

@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\Deal;
 use App\Exceptions\StoryPublicationSkippedException;
 use App\Exceptions\VkStoryNotSavedException;
+use App\Helpers\VkApiErrorInspector;
 use App\Interfaces\VkStoriesTemplateInterface;
 use App\Models\VkLoopStory;
 use App\Models\VkUser;
@@ -82,7 +83,7 @@ class PublishLoopStoriesCommand extends Command
                 $image = (new VkStoriesGenerator)->generate($context, $template);
 
                 try {
-                    $res = $vkApi->storiesPost($post->getFullId(), $image);
+                    $res = $this->postStoryWithRetry($vkApi, $post->getFullId(), $image);
 
                     if (($res['count'] ?? 0) < 1) {
                         throw new VkStoryNotSavedException(
@@ -114,6 +115,13 @@ class PublishLoopStoriesCommand extends Command
                     Log::channel('job')->warning('Повторная публикация истории пропущена', [
                         'loop_story_id' => $loopStory->id,
                     ]);
+                } elseif (VkApiErrorInspector::isTimeout($e)) {
+                    Log::channel('job')->warning('Повторная публикация истории отложена из-за обрыва связи', [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                    Log::channel('vk')->warning($e->getMessage(), [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
                 } else {
                     Log::channel('job')->warning('Ошибка переопубликации loop-истории', [
                         'loop_story_id' => $loopStory->id,
@@ -130,6 +138,29 @@ class PublishLoopStoriesCommand extends Command
         $this->info('Переопубликация loop-историй завершена');
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function postStoryWithRetry(VkApiService $vkApi, string $postId, string $image): array
+    {
+        $last = null;
+
+        for ($attempt = 1; $attempt <= VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS; $attempt++) {
+            try {
+                return $vkApi->storiesPost($postId, $image);
+            } catch (\Throwable $e) {
+                $last = $e;
+                if (! VkApiErrorInspector::isTimeout($e) || $attempt === VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS) {
+                    throw $e;
+                }
+
+                usleep(350_000);
+            }
+        }
+
+        throw $last ?? new \RuntimeException('Не удалось опубликовать историю');
     }
 
     private function shouldPostponeLoopRetry(\Throwable $e): bool
