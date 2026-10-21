@@ -35,8 +35,12 @@ class AgentSettingsTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Поздравления');
+        $response->assertSee('Автоприветствие на заявку');
+        $response->assertSee('Визитка в автоответе');
         $response->assertSee('Автоматически поздравлять с днём рождения мужчин', false);
         $response->assertSee('Автоматически поздравлять с днём рождения женщин', false);
+        $response->assertSee('Автоприветствие на заявку в друзья', false);
+        $response->assertSee('Текст приветственного письма', false);
         $response->assertSee('id="agents-table"', false);
         $response->assertSee('id="agents-sticky-hscroll"', false);
         $response->assertSee('Столбцы');
@@ -64,6 +68,8 @@ class AgentSettingsTest extends TestCase
             'wish_happy_birthday_female' => false,
             'birthday_wish_male_text' => 'М',
             'birthday_wish_female_text' => 'Ж',
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Привет',
         ]);
 
         $response->assertOk();
@@ -74,6 +80,8 @@ class AgentSettingsTest extends TestCase
             'wish_happy_birthday_female' => false,
             'has_male_text' => true,
             'has_female_text' => true,
+            'friend_request_welcome_enabled' => true,
+            'has_welcome_text' => true,
         ]);
 
         $this->assertDatabaseHas('settings', [
@@ -82,6 +90,8 @@ class AgentSettingsTest extends TestCase
             'wish_happy_birthday_female' => 0,
             'birthday_wish_male_text' => 'М',
             'birthday_wish_female_text' => 'Ж',
+            'friend_request_welcome_enabled' => 1,
+            'friend_request_welcome_text' => 'Привет',
         ]);
     }
 

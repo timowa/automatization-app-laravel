@@ -26,6 +26,7 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::get('/agents/{id}/friends', [AgentController::class, 'friends'])->whereNumber('id');
     Route::post('/agents/save/{id}', [AgentController::class, 'save']);
     Route::post('/agents/settings/{id}', [AgentController::class, 'updateSettings']);
+    Route::post('/agents/settings/{id}/card', [AgentController::class, 'uploadWelcomeCard'])->whereNumber('id');
     Route::post('/agents/delete/{id}', [AgentController::class, 'delete']);
     Route::get('/agents/change-token/{id}', [AgentController::class, 'changeToken']);
     Route::post('/agents/update-token/{id}', [AgentController::class, 'updateToken']);

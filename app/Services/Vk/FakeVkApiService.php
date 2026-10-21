@@ -31,6 +31,13 @@ class FakeVkApiService extends VkApiService
     /** @var array<int, string> */
     public array $friendListsResponse = [];
 
+    /** @var list<array<string, mixed>> */
+    public array $friendRequestsResponse = [];
+
+    public bool $hasOutgoingMessage = false;
+
+    public int $uploadMessagesPhotoId = 1001;
+
     public function setFailNext(string $exceptionClass, string $message = 'VK API error', int $errorCode = 1, int $times = 1): void
     {
         $this->failNext = true;
@@ -153,16 +160,44 @@ class FakeVkApiService extends VkApiService
         return $this->friendsResponse;
     }
 
-    public function sendDirectMessage(int $userId, string $message): array
+    public function sendDirectMessage(int $userId, string $message, ?string $attachment = null): mixed
     {
         $this->calls[] = [
             'method' => 'sendDirectMessage',
             'user_id' => $userId,
             'message' => $message,
+            'attachment' => $attachment,
         ];
         $this->maybeFail('sendDirectMessage');
 
-        return ['message_id' => fake()->unique()->numberBetween(1, 1_000_000)];
+        return fake()->unique()->numberBetween(2, 1_000_000);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function getFriendRequests(): array
+    {
+        $this->calls[] = ['method' => 'getFriendRequests'];
+        $this->maybeFail('getFriendRequests');
+
+        return $this->friendRequestsResponse;
+    }
+
+    public function hasOutgoingMessageWithUser(int $userId): bool
+    {
+        $this->calls[] = ['method' => 'hasOutgoingMessageWithUser', 'user_id' => $userId];
+        $this->maybeFail('hasOutgoingMessageWithUser');
+
+        return $this->hasOutgoingMessage;
+    }
+
+    public function uploadMessagesPhoto(string $absolutePath): int
+    {
+        $this->calls[] = ['method' => 'uploadMessagesPhoto', 'path' => $absolutePath];
+        $this->maybeFail('uploadMessagesPhoto');
+
+        return $this->uploadMessagesPhotoId;
     }
 
     public function getGroupsWithMarketForUser(int $userId): array

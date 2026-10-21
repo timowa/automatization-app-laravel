@@ -192,29 +192,31 @@
         <table id="agents-table" class="min-w-full text-sm display nowrap">
             <thead>
                 <tr>
-                    <th class="px-4 py-2 text-left">Телефон</th>
-                    <th class="px-4 py-2 text-left">ФИО</th>
-                    <th class="px-4 py-2 text-left">Количество друзей</th>
-                    <th class="px-4 py-2 text-left">Поздравления</th>
-                    <th class="px-4 py-2 text-center">Токен</th>
-                    <th class="px-4 py-2 text-center">Активность</th>
-                    <th class="px-4 py-2 text-left">VK ID</th>
-                    <th class="px-4 py-2 text-left">Имя</th>
-                    <th class="px-4 py-2 text-left">Фамилия</th>
-                    <th class="px-4 py-2 text-left">Пол</th>
-                    <th class="px-4 py-2 text-left">Дата рожд.</th>
-                    <th class="px-4 py-2 text-left">Сем. пол.</th>
-                    <th class="px-4 py-2 text-left">Screen Name</th>
-                    <th class="px-4 py-2 text-left">Domain</th>
-                    <th class="px-4 py-2 text-left">Открыт</th>
-                    <th class="px-4 py-2 text-left">Страна</th>
-                    <th class="px-4 py-2 text-left">Город</th>
-                    <th class="px-4 py-2 text-left">Родной город</th>
-                    <th class="px-4 py-2 text-left">Был в сети</th>
-                    <th class="px-4 py-2 text-left">Платформа</th>
-                    <th class="px-4 py-2 text-left">Подписчики</th>
-                    <th class="px-4 py-2 text-left" style="max-width: 200px;">Статус VK</th>
-                    <th class="px-4 py-2 text-right">Действия</th>
+                    <th class="px-4 py-2 text-left" data-col="phone">Телефон</th>
+                    <th class="px-4 py-2 text-left" data-col="name">ФИО</th>
+                    <th class="px-4 py-2 text-left" data-col="friends">Количество друзей</th>
+                    <th class="px-4 py-2 text-left" data-col="birthday">Поздравления</th>
+                    <th class="px-4 py-2 text-left" data-col="welcome">Автоприветствие на заявку</th>
+                    <th class="px-4 py-2 text-left" data-col="welcome-card">Визитка в автоответе</th>
+                    <th class="px-4 py-2 text-center" data-col="token">Токен</th>
+                    <th class="px-4 py-2 text-center" data-col="activity">Активность</th>
+                    <th class="px-4 py-2 text-left" data-col="vk-id">VK ID</th>
+                    <th class="px-4 py-2 text-left" data-col="first-name">Имя</th>
+                    <th class="px-4 py-2 text-left" data-col="last-name">Фамилия</th>
+                    <th class="px-4 py-2 text-left" data-col="sex">Пол</th>
+                    <th class="px-4 py-2 text-left" data-col="bdate">Дата рожд.</th>
+                    <th class="px-4 py-2 text-left" data-col="relation">Сем. пол.</th>
+                    <th class="px-4 py-2 text-left" data-col="screen-name">Screen Name</th>
+                    <th class="px-4 py-2 text-left" data-col="domain">Domain</th>
+                    <th class="px-4 py-2 text-left" data-col="open">Открыт</th>
+                    <th class="px-4 py-2 text-left" data-col="country">Страна</th>
+                    <th class="px-4 py-2 text-left" data-col="city">Город</th>
+                    <th class="px-4 py-2 text-left" data-col="home-town">Родной город</th>
+                    <th class="px-4 py-2 text-left" data-col="last-seen">Был в сети</th>
+                    <th class="px-4 py-2 text-left" data-col="platform">Платформа</th>
+                    <th class="px-4 py-2 text-left" data-col="followers">Подписчики</th>
+                    <th class="px-4 py-2 text-left" data-col="status" style="max-width: 200px;">Статус VK</th>
+                    <th class="px-4 py-2 text-right" data-col="actions">Действия</th>
                 </tr>
             </thead>
             <tbody class="divide-y">
@@ -247,6 +249,13 @@
                             : -1;
                         $birthdayOrder = ($maleEnabled ? 2 : 0) + ($femaleEnabled ? 1 : 0)
                             + (trim($maleText) !== '' ? 4 : 0) + (trim($femaleText) !== '' ? 8 : 0);
+                        $welcomeEnabled = (bool) ($agentSetting->friend_request_welcome_enabled ?? false);
+                        $welcomeText = trim((string) ($agentSetting->friend_request_welcome_text ?? ''));
+                        $welcomeStatus = ! $welcomeEnabled
+                            ? 'off'
+                            : ($welcomeText !== '' ? 'custom' : 'default');
+                        $hasWelcomeCard = $agentSetting?->hasWelcomeCard() ?? false;
+                        $welcomeOrder = ($welcomeEnabled ? 2 : 0) + ($welcomeText !== '' ? 4 : 0) + ($hasWelcomeCard ? 8 : 0);
                     @endphp
                     <tr
                         class="cursor-pointer hover:bg-gray-50"
@@ -257,6 +266,9 @@
                         data-wish-female="{{ $femaleEnabled ? '1' : '0' }}"
                         data-male-status="{{ $maleStatus }}"
                         data-female-status="{{ $femaleStatus }}"
+                        data-welcome-enabled="{{ $welcomeEnabled ? '1' : '0' }}"
+                        data-welcome-status="{{ $welcomeStatus }}"
+                        data-has-card="{{ $hasWelcomeCard ? '1' : '0' }}"
                     >
                         <td class="px-4 py-2" data-order="{{ $agent->phone }}">
                             <a href="/agents/edit/{{ $agent->id }}" class="font-bold">{{ $agent->phone }}</a>
@@ -276,6 +288,16 @@
                             <span class="inline-flex gap-1">
                                 <span data-gender-badge="male" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($maleStatus) }}">М</span>
                                 <span data-gender-badge="female" class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($femaleStatus) }}">Ж</span>
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $welcomeOrder }}" data-welcome-status-cell>
+                            <span data-welcome-badge class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $badgeClass($welcomeStatus) }}">
+                                {{ $welcomeEnabled ? 'Да' : 'Нет' }}
+                            </span>
+                        </td>
+                        <td class="px-4 py-2 whitespace-nowrap" data-order="{{ $hasWelcomeCard ? 1 : 0 }}" data-welcome-card-cell>
+                            <span data-welcome-card-badge class="inline-block px-2 py-1 text-xs font-semibold rounded {{ $hasWelcomeCard ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700' }}">
+                                {{ $hasWelcomeCard ? 'Да' : 'Нет' }}
                             </span>
                         </td>
                         <td class="px-4 py-2 text-center" data-order="{{ $tokenOrder }}">
@@ -417,6 +439,48 @@
                             placeholder="Если пусто — отправится стандартный текст"
                         ></textarea>
                     </div>
+                    <div class="border-t pt-5">
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" name="friend_request_welcome_enabled" value="1" class="rounded border-gray-300" id="friend_request_welcome_enabled">
+                            <span class="text-sm font-medium">Автоприветствие на заявку в друзья</span>
+                        </label>
+                        <div id="friend-request-welcome-fields" class="mt-3 space-y-3 hidden">
+                            <div>
+                                <label for="friend_request_welcome_text" class="block text-sm font-medium mb-1">Текст приветственного письма</label>
+                                <textarea
+                                    id="friend_request_welcome_text"
+                                    name="friend_request_welcome_text"
+                                    rows="6"
+                                    maxlength="4096"
+                                    class="w-full rounded border border-gray-300 px-3 py-2 text-sm"
+                                    placeholder="Если пусто — отправится стандартный текст"
+                                ></textarea>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium mb-1">Визитка агента</label>
+                                <div class="space-y-3">
+                                    <div data-welcome-card-preview-wrap class="p-5 hidden w-full overflow-hidden rounded border border-gray-200 bg-gray-50">
+                                        <img
+                                            data-welcome-card-preview
+                                            src=""
+                                            alt="Предпросмотр визитки"
+                                            class="block max-w-full h-auto w-full object-contain"
+                                        >
+                                    </div>
+                                    <input type="file" id="welcome_card_file" name="card" accept="image/jpeg,image/jpg,image/png,image/webp,.jpg,.jpeg,.png,.webp" class="block w-full text-sm">
+                                    <div class="flex flex-wrap gap-2">
+                                        <button type="button" data-upload-welcome-card class="rounded bg-gray-800 px-3 py-1.5 text-sm text-white hover:bg-gray-900 disabled:opacity-60">
+                                            Загрузить визитку
+                                        </button>
+                                        <button type="button" data-remove-welcome-card class="hidden rounded border border-red-300 px-3 py-1.5 text-sm text-red-700 hover:bg-red-50">
+                                            Удалить визитку
+                                        </button>
+                                    </div>
+                                    <p data-card-feedback class="min-h-5 text-sm" role="status"></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <p data-settings-feedback class="mt-4 min-h-5 text-sm" role="status"></p>
@@ -424,6 +488,14 @@
                     <button type="submit" class="w-full rounded bg-blue-600 py-2 text-white hover:bg-blue-700 disabled:opacity-60">Сохранить</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <div id="welcome-card-upload-overlay" class="fixed inset-0 z-[60] hidden items-center justify-center bg-black/50" aria-live="assertive" aria-busy="false">
+        <div class="rounded-lg bg-white px-8 py-6 shadow-xl text-center">
+            <div class="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600"></div>
+            <p class="text-sm font-medium text-gray-800">Загрузка визитки…</p>
+            <p class="mt-1 text-xs text-gray-500">Пожалуйста, подождите. Окно нельзя закрыть.</p>
         </div>
     </div>
 
@@ -556,8 +628,76 @@
 
             window.addEventListener('resize', updateStickyScrollbar);
 
+            const stateKey = 'dt:agents-list:v3';
+            // Старые ключи могли сохранить видимость со сдвигом (tHead.cells без скрытых столбцов).
+            window.localStorage.removeItem('dt:agents-list:v1');
+            window.localStorage.removeItem('dt:agents-list:v2');
+
+            // DataTables 2 убирает скрытые th из DOM — ключи только через API.
+            function columnKeys(dt) {
+                return dt.columns().header().toArray().map(function (th, index) {
+                    return th.getAttribute('data-col') || ('col-' + index);
+                });
+            }
+
+            function loadColumnVisibility() {
+                try {
+                    const raw = window.localStorage.getItem(stateKey);
+                    if (!raw) {
+                        return null;
+                    }
+                    const parsed = JSON.parse(raw);
+                    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function saveColumnVisibility(dt) {
+                const keys = columnKeys(dt);
+                const visibility = {};
+                for (let index = 0; index < keys.length; index++) {
+                    const key = keys[index];
+                    if (!key || key === 'actions') {
+                        continue;
+                    }
+                    visibility[key] = dt.column(index).visible();
+                }
+                window.localStorage.setItem(stateKey, JSON.stringify(visibility));
+            }
+
+            let suppressColumnSave = false;
+
+            function applyColumnVisibility(dt, savedVisibility) {
+                if (!savedVisibility) {
+                    return;
+                }
+                const keys = columnKeys(dt);
+                let changed = false;
+                suppressColumnSave = true;
+                try {
+                    for (let index = 0; index < keys.length; index++) {
+                        const key = keys[index];
+                        if (!key || key === 'actions' || typeof savedVisibility[key] !== 'boolean') {
+                            continue;
+                        }
+                        if (dt.column(index).visible() !== savedVisibility[key]) {
+                            dt.column(index).visible(savedVisibility[key], false);
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        dt.columns.adjust().draw(false);
+                    }
+                } finally {
+                    suppressColumnSave = false;
+                }
+            }
+
             let dataTable;
             try {
+                const savedVisibility = loadColumnVisibility();
+
                 dataTable = new DataTable(tableEl, {
                     paging: false,
                     info: false,
@@ -579,7 +719,7 @@
                                     text: 'Сбросить столбцы',
                                     className: 'agents-btn-reset-columns',
                                     action: function (e, dt) {
-                                        dt.state.clear();
+                                        window.localStorage.removeItem(stateKey);
                                         dt.columns().visible(true, false);
                                         dt.columns.adjust().draw(false);
                                         window.requestAnimationFrame(updateStickyScrollbar);
@@ -605,9 +745,10 @@
                             className: 'no-colvis',
                         },
                     ],
-                    stateSave: true,
-                    stateDuration: 0,
+                    stateSave: false,
                 });
+
+                applyColumnVisibility(dataTable, savedVisibility);
             } catch (error) {
                 console.error('Agents table: DataTables init failed', error);
                 return;
@@ -619,7 +760,13 @@
                 toolbar.appendChild(buttonsContainer);
             }
 
-            dataTable.on('column-visibility.dt draw.dt columns-adjust.dt', function () {
+            dataTable.on('column-visibility.dt', function () {
+                if (!suppressColumnSave) {
+                    saveColumnVisibility(dataTable);
+                }
+                window.requestAnimationFrame(updateStickyScrollbar);
+            });
+            dataTable.on('draw.dt columns-adjust.dt', function () {
                 window.requestAnimationFrame(updateStickyScrollbar);
             });
 
@@ -637,11 +784,22 @@
             const femaleCheckbox = form.querySelector('input[name="wish_happy_birthday_female"]');
             const maleTextarea = form.querySelector('textarea[name="birthday_wish_male_text"]');
             const femaleTextarea = form.querySelector('textarea[name="birthday_wish_female_text"]');
+            const welcomeCheckbox = form.querySelector('input[name="friend_request_welcome_enabled"]');
+            const welcomeTextarea = form.querySelector('textarea[name="friend_request_welcome_text"]');
+            const welcomeFields = document.getElementById('friend-request-welcome-fields');
+            const cardFileInput = document.getElementById('welcome_card_file');
+            const cardPreview = root.querySelector('[data-welcome-card-preview]');
+            const cardPreviewWrap = root.querySelector('[data-welcome-card-preview-wrap]');
+            const uploadCardButton = root.querySelector('[data-upload-welcome-card]');
+            const removeCardButton = root.querySelector('[data-remove-welcome-card]');
+            const cardFeedback = root.querySelector('[data-card-feedback]');
+            const uploadOverlay = document.getElementById('welcome-card-upload-overlay');
             const feedback = root.querySelector('[data-settings-feedback]');
             const submitButton = form.querySelector('button[type="submit"]');
             const csrf = root.dataset.csrf;
             const birthdayTextsNode = document.getElementById('agent-birthday-texts');
             let birthdayTextsByAgent = {};
+            let removeWelcomeCard = false;
             try {
                 birthdayTextsByAgent = JSON.parse(birthdayTextsNode?.textContent || '{}');
             } catch (error) {
@@ -680,8 +838,74 @@
                     + '</span>';
             }
 
+            function welcomeBadgeHtml(enabled, status) {
+                return '<span data-welcome-badge class="' + badgeClasses(status) + '">' + (enabled ? 'Да' : 'Нет') + '</span>';
+            }
+
+            function cardBadgeHtml(hasCard) {
+                const cls = hasCard
+                    ? 'inline-block px-2 py-1 text-xs font-semibold rounded bg-green-100 text-green-700'
+                    : 'inline-block px-2 py-1 text-xs font-semibold rounded bg-gray-200 text-gray-700';
+                return '<span data-welcome-card-badge class="' + cls + '">' + (hasCard ? 'Да' : 'Нет') + '</span>';
+            }
+
+            function syncWelcomeFieldsVisibility() {
+                if (welcomeCheckbox.checked) {
+                    welcomeFields.classList.remove('hidden');
+                } else {
+                    welcomeFields.classList.add('hidden');
+                }
+            }
+
+            function setCardUi(hasCard, cardUrl) {
+                if (hasCard && cardUrl) {
+                    cardPreview.src = cardUrl;
+                    cardPreviewWrap.classList.remove('hidden');
+                    removeCardButton.classList.remove('hidden');
+                } else {
+                    cardPreview.removeAttribute('src');
+                    cardPreviewWrap.classList.add('hidden');
+                    removeCardButton.classList.add('hidden');
+                }
+            }
+
+            function setUploadOverlay(visible) {
+                if (!uploadOverlay) {
+                    return;
+                }
+                if (visible) {
+                    uploadOverlay.classList.remove('hidden');
+                    uploadOverlay.classList.add('flex');
+                    uploadOverlay.setAttribute('aria-busy', 'true');
+                } else {
+                    uploadOverlay.classList.add('hidden');
+                    uploadOverlay.classList.remove('flex');
+                    uploadOverlay.setAttribute('aria-busy', 'false');
+                }
+            }
+
+            function updateWelcomeRowBadges(enabled, hasText, hasCard) {
+                const welcomeStatus = statusFromFlags(enabled, hasText);
+                currentRow.dataset.welcomeEnabled = enabled ? '1' : '0';
+                currentRow.dataset.welcomeStatus = welcomeStatus;
+                currentRow.dataset.hasCard = hasCard ? '1' : '0';
+
+                const welcomeCell = currentRow.querySelector('[data-welcome-status-cell]');
+                if (welcomeCell) {
+                    welcomeCell.innerHTML = welcomeBadgeHtml(enabled, welcomeStatus);
+                    welcomeCell.setAttribute('data-order', String((enabled ? 2 : 0) + (hasText ? 4 : 0) + (hasCard ? 8 : 0)));
+                }
+
+                const cardCell = currentRow.querySelector('[data-welcome-card-cell]');
+                if (cardCell) {
+                    cardCell.innerHTML = cardBadgeHtml(hasCard);
+                    cardCell.setAttribute('data-order', hasCard ? '1' : '0');
+                }
+            }
+
             function openOffcanvas(row) {
                 currentRow = row;
+                removeWelcomeCard = false;
                 title.textContent = row.dataset.agentName || '';
                 phone.textContent = row.dataset.agentPhone || '';
                 const texts = birthdayTextsByAgent[row.dataset.agentId] || {
@@ -689,11 +913,22 @@
                     female_enabled: false,
                     male: '',
                     female: '',
+                    welcome_enabled: false,
+                    welcome_text: '',
+                    has_card: false,
+                    card_url: '',
                 };
                 maleCheckbox.checked = Boolean(texts.male_enabled) || row.dataset.wishMale === '1';
                 femaleCheckbox.checked = Boolean(texts.female_enabled) || row.dataset.wishFemale === '1';
                 maleTextarea.value = texts.male || '';
                 femaleTextarea.value = texts.female || '';
+                welcomeCheckbox.checked = Boolean(texts.welcome_enabled) || row.dataset.welcomeEnabled === '1';
+                welcomeTextarea.value = texts.welcome_text || '';
+                setCardUi(Boolean(texts.has_card), texts.card_url || '');
+                cardFileInput.value = '';
+                cardFeedback.textContent = '';
+                cardFeedback.className = 'min-h-5 text-sm';
+                syncWelcomeFieldsVisibility();
                 form.action = '/agents/settings/' + row.dataset.agentId;
                 feedback.textContent = '';
                 feedback.className = 'mt-4 min-h-5 text-sm';
@@ -710,6 +945,9 @@
             }
 
             function closeOffcanvas() {
+                if (uploadOverlay && !uploadOverlay.classList.contains('hidden')) {
+                    return;
+                }
                 backdrop.classList.add('opacity-0');
                 backdrop.classList.remove('opacity-100');
                 panel.classList.add('translate-x-full');
@@ -719,6 +957,96 @@
                     root.setAttribute('aria-hidden', 'true');
                 }, 300);
             }
+
+            welcomeCheckbox.addEventListener('change', syncWelcomeFieldsVisibility);
+
+            uploadCardButton.addEventListener('click', function () {
+                if (!currentRow || !cardFileInput.files || !cardFileInput.files[0]) {
+                    cardFeedback.textContent = 'Выберите файл визитки';
+                    cardFeedback.className = 'min-h-5 text-sm text-red-600';
+                    return;
+                }
+
+                const selectedFile = cardFileInput.files[0];
+                const formData = new FormData();
+                formData.append('_token', csrf);
+                formData.append('card', selectedFile, selectedFile.name);
+
+                setUploadOverlay(true);
+                cardFeedback.textContent = '';
+                cardFeedback.className = 'min-h-5 text-sm';
+                uploadCardButton.disabled = true;
+
+                fetch('/agents/settings/' + currentRow.dataset.agentId + '/card', {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Accept': 'application/json',
+                        'X-CSRF-TOKEN': csrf,
+                    },
+                    credentials: 'same-origin',
+                })
+                .then(function (response) {
+                    return response.json().then(function (data) {
+                        return { ok: response.ok, status: response.status, data: data };
+                    }).catch(function () {
+                        return { ok: false, status: response.status, data: {} };
+                    });
+                })
+                .then(function (result) {
+                    const data = result.data || {};
+                    if (!result.ok || !data.success) {
+                        let messages = data.messages || [];
+                        if (!messages.length && data.errors) {
+                            messages = Object.values(data.errors).flat();
+                        }
+                        if (!messages.length && data.message) {
+                            messages = [data.message];
+                        }
+                        if (!messages.length && result.status === 419) {
+                            messages = ['Сессия устарела. Обновите страницу и попробуйте снова.'];
+                        }
+                        if (!messages.length && result.status === 413) {
+                            messages = ['Файл слишком большой. Максимум 5 МБ.'];
+                        }
+                        cardFeedback.textContent = messages.join('\n') || 'Не удалось загрузить визитку';
+                        cardFeedback.classList.add('text-red-600');
+                        return;
+                    }
+
+                    removeWelcomeCard = false;
+                    const agentId = currentRow.dataset.agentId;
+                    const current = birthdayTextsByAgent[agentId] || {};
+                    current.has_card = true;
+                    current.card_url = data.card_url || '';
+                    birthdayTextsByAgent[agentId] = current;
+                    setCardUi(true, current.card_url);
+                    updateWelcomeRowBadges(
+                        Boolean(current.welcome_enabled) || welcomeCheckbox.checked,
+                        Boolean((current.welcome_text || welcomeTextarea.value || '').trim()),
+                        true
+                    );
+                    cardFileInput.value = '';
+                    cardFeedback.textContent = (data.messages && data.messages[0]) || 'Визитка загружена';
+                    cardFeedback.classList.add('text-green-700');
+                })
+                .catch(function () {
+                    cardFeedback.textContent = 'Ошибка загрузки визитки';
+                    cardFeedback.classList.add('text-red-600');
+                })
+                .finally(function () {
+                    setUploadOverlay(false);
+                    uploadCardButton.disabled = false;
+                });
+            });
+
+            removeCardButton.addEventListener('click', function () {
+                removeWelcomeCard = true;
+                setCardUi(false, '');
+                cardFeedback.textContent = 'Визитка будет удалена после сохранения настроек';
+                cardFeedback.className = 'min-h-5 text-sm text-yellow-800';
+            });
 
             tableEl.addEventListener('click', function (event) {
                 if (event.target.closest('a, button, input, label, form')) {
@@ -752,12 +1080,17 @@
                 const femaleEnabled = femaleCheckbox.checked;
                 const maleText = maleTextarea.value;
                 const femaleText = femaleTextarea.value;
+                const welcomeEnabled = welcomeCheckbox.checked;
+                const welcomeText = welcomeTextarea.value;
                 const formData = new FormData();
                 formData.append('_token', csrf);
                 formData.append('wish_happy_birthday_male', maleEnabled ? '1' : '0');
                 formData.append('wish_happy_birthday_female', femaleEnabled ? '1' : '0');
                 formData.append('birthday_wish_male_text', maleText);
                 formData.append('birthday_wish_female_text', femaleText);
+                formData.append('friend_request_welcome_enabled', welcomeEnabled ? '1' : '0');
+                formData.append('friend_request_welcome_text', welcomeText);
+                formData.append('remove_welcome_card', removeWelcomeCard ? '1' : '0');
 
                 submitButton.disabled = true;
                 feedback.textContent = '';
@@ -797,6 +1130,9 @@
                     const hasFemaleText = Boolean(data.has_female_text);
                     const maleStatus = statusFromFlags(savedMale, hasMaleText);
                     const femaleStatus = statusFromFlags(savedFemale, hasFemaleText);
+                    const savedWelcome = Boolean(data.friend_request_welcome_enabled);
+                    const hasWelcomeText = Boolean(data.has_welcome_text);
+                    const hasCard = Boolean(data.has_card);
 
                     currentRow.dataset.wishMale = savedMale ? '1' : '0';
                     currentRow.dataset.wishFemale = savedFemale ? '1' : '0';
@@ -806,11 +1142,20 @@
                     femaleCheckbox.checked = savedFemale;
                     maleTextarea.value = data.birthday_wish_male_text || '';
                     femaleTextarea.value = data.birthday_wish_female_text || '';
+                    welcomeCheckbox.checked = savedWelcome;
+                    welcomeTextarea.value = data.friend_request_welcome_text || '';
+                    removeWelcomeCard = false;
+                    setCardUi(hasCard, data.card_url || '');
+                    syncWelcomeFieldsVisibility();
                     birthdayTextsByAgent[currentRow.dataset.agentId] = {
                         male_enabled: savedMale,
                         female_enabled: savedFemale,
                         male: data.birthday_wish_male_text || '',
                         female: data.birthday_wish_female_text || '',
+                        welcome_enabled: savedWelcome,
+                        welcome_text: data.friend_request_welcome_text || '',
+                        has_card: hasCard,
+                        card_url: data.card_url || '',
                     };
                     const statusCell = currentRow.querySelector('[data-birthday-status]');
                     if (statusCell) {
@@ -825,6 +1170,7 @@
                             )
                         );
                     }
+                    updateWelcomeRowBadges(savedWelcome, hasWelcomeText, hasCard);
                     feedback.textContent = (data.messages && data.messages[0]) || 'Настройки сохранены';
                     feedback.classList.add('text-green-700');
                 })

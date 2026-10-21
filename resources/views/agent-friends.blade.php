@@ -440,48 +440,48 @@
         <table id="agent-friends-table" class="min-w-full text-sm display nowrap">
             <thead>
                 <tr>
-                    <th class="px-4 py-2 text-left">Фото</th>
-                    <th class="px-4 py-2 text-left">ID</th>
-                    <th class="px-4 py-2 text-left">Имя</th>
-                    <th class="px-4 py-2 text-left">Фамилия</th>
-                    <th class="px-4 py-2 text-left">Страница</th>
-                    <th class="px-4 py-2 text-left">Профиль</th>
-                    <th class="px-4 py-2 text-left">Никнейм</th>
-                    <th class="px-4 py-2 text-left">Пол</th>
-                    <th class="px-4 py-2 text-left">Дата рождения</th>
-                    <th class="px-4 py-2 text-left">Семейное положение</th>
-                    <th class="px-4 py-2 text-left">Адрес страницы</th>
-                    <th class="px-4 py-2 text-left">Город</th>
-                    <th class="px-4 py-2 text-left">Страна</th>
-                    <th class="px-4 py-2 text-left">Родной город</th>
-                    <th class="px-4 py-2 text-left">Род занятий</th>
-                    <th class="px-4 py-2 text-left">Мобильный телефон</th>
-                    <th class="px-4 py-2 text-left">Домашний телефон</th>
-                    <th class="px-4 py-2 text-left">Есть мобильный</th>
-                    <th class="px-4 py-2 text-left">Онлайн</th>
-                    <th class="px-4 py-2 text-left">Был в сети</th>
-                    <th class="px-4 py-2 text-left">Платформа</th>
-                    <th class="px-4 py-2 text-left">Часовой пояс</th>
-                    <th class="px-4 py-2 text-left">Вуз</th>
-                    <th class="px-4 py-2 text-left">Факультет</th>
-                    <th class="px-4 py-2 text-left">Год выпуска</th>
-                    <th class="px-4 py-2 text-left">Университеты</th>
-                    <th class="px-4 py-2 text-left">Статус</th>
-                    <th class="px-4 py-2 text-left">Фото 50</th>
-                    <th class="px-4 py-2 text-left">Фото 200</th>
-                    <th class="px-4 py-2 text-left">ID фото</th>
-                    <th class="px-4 py-2 text-left">Есть фото</th>
-                    <th class="px-4 py-2 text-left">В чёрном списке</th>
-                    <th class="px-4 py-2 text-left">Подписчики</th>
-                    <th class="px-4 py-2 text-left">Подтверждена</th>
-                    <th class="px-4 py-2 text-left">Девичья фамилия</th>
-                    <th class="px-4 py-2 text-left">Партнёр</th>
-                    <th class="px-4 py-2 text-left">Школы</th>
-                    <th class="px-4 py-2 text-left">Карьера</th>
-                    <th class="px-4 py-2 text-left">Сайт</th>
-                    <th class="px-4 py-2 text-left">Форма обучения</th>
-                    <th class="px-4 py-2 text-left">Статус учёбы</th>
-                    <th class="px-4 py-2 text-left">Списки</th>
+                    <th class="px-4 py-2 text-left" data-col="photo">Фото</th>
+                    <th class="px-4 py-2 text-left" data-col="id">ID</th>
+                    <th class="px-4 py-2 text-left" data-col="first-name">Имя</th>
+                    <th class="px-4 py-2 text-left" data-col="last-name">Фамилия</th>
+                    <th class="px-4 py-2 text-left" data-col="page">Страница</th>
+                    <th class="px-4 py-2 text-left" data-col="profile">Профиль</th>
+                    <th class="px-4 py-2 text-left" data-col="nickname">Никнейм</th>
+                    <th class="px-4 py-2 text-left" data-col="sex">Пол</th>
+                    <th class="px-4 py-2 text-left" data-col="bdate">Дата рождения</th>
+                    <th class="px-4 py-2 text-left" data-col="relation">Семейное положение</th>
+                    <th class="px-4 py-2 text-left" data-col="domain">Адрес страницы</th>
+                    <th class="px-4 py-2 text-left" data-col="city">Город</th>
+                    <th class="px-4 py-2 text-left" data-col="country">Страна</th>
+                    <th class="px-4 py-2 text-left" data-col="home-town">Родной город</th>
+                    <th class="px-4 py-2 text-left" data-col="occupation">Род занятий</th>
+                    <th class="px-4 py-2 text-left" data-col="mobile">Мобильный телефон</th>
+                    <th class="px-4 py-2 text-left" data-col="home-phone">Домашний телефон</th>
+                    <th class="px-4 py-2 text-left" data-col="has-mobile">Есть мобильный</th>
+                    <th class="px-4 py-2 text-left" data-col="online">Онлайн</th>
+                    <th class="px-4 py-2 text-left" data-col="last-seen">Был в сети</th>
+                    <th class="px-4 py-2 text-left" data-col="platform">Платформа</th>
+                    <th class="px-4 py-2 text-left" data-col="timezone">Часовой пояс</th>
+                    <th class="px-4 py-2 text-left" data-col="university">Вуз</th>
+                    <th class="px-4 py-2 text-left" data-col="faculty">Факультет</th>
+                    <th class="px-4 py-2 text-left" data-col="graduation">Год выпуска</th>
+                    <th class="px-4 py-2 text-left" data-col="universities">Университеты</th>
+                    <th class="px-4 py-2 text-left" data-col="status">Статус</th>
+                    <th class="px-4 py-2 text-left" data-col="photo-50">Фото 50</th>
+                    <th class="px-4 py-2 text-left" data-col="photo-200">Фото 200</th>
+                    <th class="px-4 py-2 text-left" data-col="photo-id">ID фото</th>
+                    <th class="px-4 py-2 text-left" data-col="has-photo">Есть фото</th>
+                    <th class="px-4 py-2 text-left" data-col="blacklist">В чёрном списке</th>
+                    <th class="px-4 py-2 text-left" data-col="followers">Подписчики</th>
+                    <th class="px-4 py-2 text-left" data-col="verified">Подтверждена</th>
+                    <th class="px-4 py-2 text-left" data-col="maiden-name">Девичья фамилия</th>
+                    <th class="px-4 py-2 text-left" data-col="partner">Партнёр</th>
+                    <th class="px-4 py-2 text-left" data-col="schools">Школы</th>
+                    <th class="px-4 py-2 text-left" data-col="career">Карьера</th>
+                    <th class="px-4 py-2 text-left" data-col="site">Сайт</th>
+                    <th class="px-4 py-2 text-left" data-col="education-form">Форма обучения</th>
+                    <th class="px-4 py-2 text-left" data-col="education-status">Статус учёбы</th>
+                    <th class="px-4 py-2 text-left" data-col="lists">Списки</th>
                 </tr>
             </thead>
             <tbody class="divide-y">
@@ -995,8 +995,132 @@
             stickyThumb.addEventListener('pointercancel', endDrag);
             window.addEventListener('resize', updateStickyScrollbar);
 
+            const stateKey = 'dt:agent-friends:{{ $agent->id }}:v3';
+            const filtersKey = 'dt:agent-friends-filters:{{ $agent->id }}:v1';
+            // Старые ключи могли сохранить видимость со сдвигом (tHead.cells без скрытых столбцов).
+            window.localStorage.removeItem('dt:agent-friends:{{ $agent->id }}:v1');
+            window.localStorage.removeItem('dt:agent-friends:{{ $agent->id }}:v2');
+            const hiddenByDefaultKeys = [
+                'home-phone', 'has-mobile', 'platform', 'timezone', 'faculty', 'graduation', 'universities',
+                'photo-50', 'photo-200', 'photo-id', 'has-photo', 'blacklist', 'followers', 'verified',
+                'maiden-name', 'partner', 'schools', 'career', 'site', 'education-form', 'education-status', 'lists',
+            ];
+
+            // DataTables 2 убирает скрытые th из DOM — ключи только через API.
+            function columnKeys(dt) {
+                return dt.columns().header().toArray().map(function (th, index) {
+                    return th.getAttribute('data-col') || ('col-' + index);
+                });
+            }
+
+            function loadColumnVisibility() {
+                try {
+                    const raw = window.localStorage.getItem(stateKey);
+                    if (!raw) {
+                        return null;
+                    }
+                    const parsed = JSON.parse(raw);
+                    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function saveColumnVisibility(dt) {
+                const keys = columnKeys(dt);
+                const visibility = {};
+                for (let index = 0; index < keys.length; index++) {
+                    const key = keys[index];
+                    if (!key) {
+                        continue;
+                    }
+                    visibility[key] = dt.column(index).visible();
+                }
+                window.localStorage.setItem(stateKey, JSON.stringify(visibility));
+            }
+
+            let suppressColumnSave = false;
+
+            function applyColumnVisibility(dt, savedVisibility) {
+                const keys = columnKeys(dt);
+                let changed = false;
+                suppressColumnSave = true;
+                try {
+                    for (let index = 0; index < keys.length; index++) {
+                        const key = keys[index];
+                        let visible = hiddenByDefaultKeys.indexOf(key) === -1;
+                        if (savedVisibility && typeof savedVisibility[key] === 'boolean') {
+                            visible = savedVisibility[key];
+                        }
+                        if (dt.column(index).visible() !== visible) {
+                            dt.column(index).visible(visible, false);
+                            changed = true;
+                        }
+                    }
+                    if (changed) {
+                        dt.columns.adjust().draw(false);
+                    }
+                } finally {
+                    suppressColumnSave = false;
+                }
+            }
+
+            const filtersForm = document.querySelector('form[action="/agents/{{ $agent->id }}/friends"]');
+            if (filtersForm) {
+                filtersForm.addEventListener('submit', function () {
+                    const data = new FormData(filtersForm);
+                    const saved = {};
+                    data.forEach(function (value, key) {
+                        if (!Object.prototype.hasOwnProperty.call(saved, key)) {
+                            saved[key] = value;
+                            return;
+                        }
+                        if (!Array.isArray(saved[key])) {
+                            saved[key] = [saved[key]];
+                        }
+                        saved[key].push(value);
+                    });
+                    window.localStorage.setItem(filtersKey, JSON.stringify(saved));
+                });
+
+                const resetLink = filtersForm.querySelector('a[href="/agents/{{ $agent->id }}/friends"]');
+                if (resetLink) {
+                    resetLink.addEventListener('click', function () {
+                        window.localStorage.removeItem(filtersKey);
+                    });
+                }
+
+                if (!window.location.search || window.location.search === '?') {
+                    try {
+                        const savedFilters = JSON.parse(window.localStorage.getItem(filtersKey) || 'null');
+                        if (savedFilters && typeof savedFilters === 'object') {
+                            const params = new URLSearchParams();
+                            Object.keys(savedFilters).forEach(function (key) {
+                                const value = savedFilters[key];
+                                if (Array.isArray(value)) {
+                                    value.forEach(function (item) {
+                                        params.append(key, item);
+                                    });
+                                } else if (value !== null && value !== undefined && String(value) !== '') {
+                                    params.set(key, String(value));
+                                }
+                            });
+                            const query = params.toString();
+                            if (query) {
+                                window.location.replace(filtersForm.action + '?' + query);
+                                return;
+                            }
+                        }
+                    } catch (error) {
+                        console.error('Friends filters restore failed', error);
+                    }
+                }
+            }
+
             let dataTable;
             try {
+                const savedVisibility = loadColumnVisibility();
+
                 dataTable = new DataTable(tableEl, {
                     paging: false,
                     info: false,
@@ -1018,11 +1142,8 @@
                                     text: 'Сбросить столбцы',
                                     className: 'agents-btn-reset-columns',
                                     action: function (e, dt) {
-                                        const hiddenByDefault = [16, 17, 20, 21, 23, 24, 25, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41];
-                                        dt.state.clear();
-                                        dt.columns().visible(true, false);
-                                        dt.columns(hiddenByDefault).visible(false, false);
-                                        dt.columns.adjust().draw(false);
+                                        window.localStorage.removeItem(stateKey);
+                                        applyColumnVisibility(dt, null);
                                         window.requestAnimationFrame(updateStickyScrollbar);
                                     },
                                 },
@@ -1039,15 +1160,10 @@
                             colvisRestore: 'Показать все',
                         },
                     },
-                    columnDefs: [
-                        {
-                            targets: [16, 17, 20, 21, 23, 24, 25, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41],
-                            visible: false,
-                        },
-                    ],
-                    stateSave: true,
-                    stateDuration: 0,
+                    stateSave: false,
                 });
+
+                applyColumnVisibility(dataTable, savedVisibility);
             } catch (error) {
                 console.error('Friends table: DataTables init failed', error);
                 return;
@@ -1059,7 +1175,13 @@
                 toolbar.appendChild(buttonsContainer);
             }
 
-            dataTable.on('column-visibility.dt draw.dt columns-adjust.dt', function () {
+            dataTable.on('column-visibility.dt', function () {
+                if (!suppressColumnSave) {
+                    saveColumnVisibility(dataTable);
+                }
+                window.requestAnimationFrame(updateStickyScrollbar);
+            });
+            dataTable.on('draw.dt columns-adjust.dt', function () {
                 window.requestAnimationFrame(updateStickyScrollbar);
             });
 

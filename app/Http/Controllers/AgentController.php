@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Actions\GetAgentPublicationStatsAction;
 use App\Actions\Vk\ListAgentVkFriendsAction;
+use App\Actions\Vk\StoreAgentWelcomeCardAction;
 use App\Actions\Vk\SyncVkUserAction;
 use App\Enums\Vk\Deactivated;
 use App\Enums\Vk\OccupationType;
@@ -14,6 +15,7 @@ use App\Enums\Vk\Sex;
 use App\Http\Requests\StoreAgentRequest;
 use App\Http\Requests\UpdateAgentRequest;
 use App\Http\Requests\UpdateAgentSettingsRequest;
+use App\Http\Requests\UploadAgentWelcomeCardRequest;
 use App\Models\Agent;
 use App\Models\Setting;
 use App\Models\VkUser;
@@ -47,7 +49,7 @@ class AgentController extends Controller
             ->get()
             ->keyBy('agent_id');
 
-        $settings = Setting::all()->keyBy('agent_id');
+        $settings = Setting::query()->with('welcomeCard')->get()->keyBy('agent_id');
 
         $friendCounts = DB::table('agents_vk_friends')
             ->select('agent_id', DB::raw('COUNT(*) as friends_count'))
@@ -57,6 +59,8 @@ class AgentController extends Controller
 
         $birthdayTextsByAgent = $agents->mapWithKeys(function (Agent $agent) use ($settings): array {
             $setting = $settings[$agent->id] ?? null;
+            $card = $setting?->welcomeCard;
+            $hasCard = $setting !== null && $setting->hasWelcomeCard();
 
             return [
                 (string) $agent->id => [
@@ -64,6 +68,10 @@ class AgentController extends Controller
                     'female_enabled' => (bool) ($setting->wish_happy_birthday_female ?? false),
                     'male' => (string) ($setting->birthday_wish_male_text ?? ''),
                     'female' => (string) ($setting->birthday_wish_female_text ?? ''),
+                    'welcome_enabled' => (bool) ($setting->friend_request_welcome_enabled ?? false),
+                    'welcome_text' => (string) ($setting->friend_request_welcome_text ?? ''),
+                    'has_card' => $hasCard,
+                    'card_url' => $hasCard && $card !== null ? $card->previewUrl() : '',
                 ],
             ];
         });
@@ -143,22 +151,33 @@ class AgentController extends Controller
         $wishFemale = $request->boolean('wish_happy_birthday_female');
         $maleText = $this->nullableTrimmedText($request->input('birthday_wish_male_text'));
         $femaleText = $this->nullableTrimmedText($request->input('birthday_wish_female_text'));
+        $welcomeEnabled = $request->boolean('friend_request_welcome_enabled');
+        $welcomeText = $this->nullableTrimmedText($request->input('friend_request_welcome_text'));
 
-        Setting::updateOrCreate(
-            ['agent_id' => $agent->id],
-            [
-                'wish_happy_birthday_male' => $wishMale,
-                'wish_happy_birthday_female' => $wishFemale,
-                'birthday_wish_male_text' => $maleText,
-                'birthday_wish_female_text' => $femaleText,
-            ]
-        );
+        $setting = Setting::query()->with('welcomeCard')->firstOrNew(['agent_id' => $agent->id]);
+        $setting->wish_happy_birthday_male = $wishMale;
+        $setting->wish_happy_birthday_female = $wishFemale;
+        $setting->birthday_wish_male_text = $maleText;
+        $setting->birthday_wish_female_text = $femaleText;
+        $setting->friend_request_welcome_enabled = $welcomeEnabled;
+        $setting->friend_request_welcome_text = $welcomeText;
+        $setting->save();
+
+        if ($request->boolean('remove_welcome_card')) {
+            app(StoreAgentWelcomeCardAction::class)->deleteForSetting($setting);
+        }
+
+        $setting->refresh()->load('welcomeCard');
 
         Log::channel('job')->info('Настройки агента обновлены', [
             'agent_id' => $id,
             'wish_happy_birthday_male' => $wishMale,
             'wish_happy_birthday_female' => $wishFemale,
+            'friend_request_welcome_enabled' => $welcomeEnabled,
         ]);
+
+        $hasCard = $setting->hasWelcomeCard();
+        $card = $setting->welcomeCard;
 
         return response()->json([
             'success' => true,
@@ -170,6 +189,122 @@ class AgentController extends Controller
             'birthday_wish_female_text' => $femaleText ?? '',
             'has_male_text' => $maleText !== null,
             'has_female_text' => $femaleText !== null,
+            'friend_request_welcome_enabled' => $welcomeEnabled,
+            'friend_request_welcome_text' => $welcomeText ?? '',
+            'has_welcome_text' => $welcomeText !== null,
+            'has_card' => $hasCard,
+            'card_url' => $hasCard && $card !== null ? $card->previewUrl() : '',
+        ]);
+    }
+
+    public function uploadWelcomeCard(
+        UploadAgentWelcomeCardRequest $request,
+        int $id,
+        VkApiService $vkApi,
+        StoreAgentWelcomeCardAction $storeWelcomeCard,
+    ): JsonResponse {
+        $agent = Agent::with('vkUser')->findOrFail($id);
+        $vkUser = $agent->vkUser;
+        $paths = null;
+
+        Log::channel('vk-images')->info('Цикл загрузки визитки: старт', [
+            'agent_id' => $agent->id,
+            'vk_user_id' => $vkUser?->vk_user_id,
+        ]);
+
+        if ($vkUser === null || $vkUser->getToken() === '' || ! $vkUser->is_token_available) {
+            Log::channel('vk-images')->warning('Цикл загрузки визитки: нет рабочего токена', [
+                'agent_id' => $agent->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'messages' => ['Нет рабочего токена ВКонтакте для загрузки визитки'],
+            ], 422);
+        }
+
+        $file = $request->file('card');
+        if ($file === null) {
+            Log::channel('vk-images')->warning('Цикл загрузки визитки: файл не получен', [
+                'agent_id' => $agent->id,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'messages' => ['Файл визитки не получен'],
+            ], 422);
+        }
+
+        Log::channel('vk-images')->info('Цикл загрузки визитки: исходный файл', [
+            'agent_id' => $agent->id,
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $file->getMimeType(),
+            'size_bytes' => $file->getSize(),
+        ]);
+
+        try {
+            $paths = $storeWelcomeCard->writeLocalFiles($agent, $file);
+
+            $vkApi->setToken($vkUser->getToken());
+            Log::channel('vk-images')->info('Цикл загрузки визитки: отправка во ВК', [
+                'agent_id' => $agent->id,
+                'vk_user_id' => $vkUser->vk_user_id,
+                'absolute_path' => $paths['absolute_original'],
+            ]);
+
+            $mediaId = $vkApi->uploadMessagesPhoto($paths['absolute_original']);
+            $card = $storeWelcomeCard->persist($agent, $paths, $mediaId);
+        } catch (\Throwable $e) {
+            $storeWelcomeCard->cleanupLocalFiles($paths);
+
+            Log::channel('job')->warning('Ошибка загрузки визитки автоприветствия', [
+                'agent_id' => $agent->id,
+            ]);
+            Log::channel('vk-images')->error('Цикл загрузки визитки: ошибка', [
+                'agent_id' => $agent->id,
+                'vk_user_id' => $vkUser->vk_user_id,
+                'path' => $paths['path'] ?? null,
+                'thumb_path' => $paths['thumb_path'] ?? null,
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+                'code' => $e->getCode(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            Log::channel('vk')->error($e->getMessage(), [
+                'agent_id' => $agent->id,
+                'context' => 'upload_welcome_card',
+                'exception' => $e::class,
+                'code' => $e->getCode(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'messages' => ['Не удалось загрузить визитку во ВКонтакте. Попробуйте другое изображение.'],
+            ], 422);
+        }
+
+        Log::channel('job')->info('Визитка автоприветствия загружена', [
+            'agent_id' => $agent->id,
+            'media_id' => $card->media_id,
+            'card_id' => $card->id,
+        ]);
+        Log::channel('vk-images')->info('Цикл загрузки визитки: завершён успешно', [
+            'agent_id' => $agent->id,
+            'vk_user_id' => $vkUser->vk_user_id,
+            'card_id' => $card->id,
+            'path' => $card->path,
+            'thumb_path' => $card->thumb_path,
+            'media_id' => $card->media_id,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'messages' => ['Визитка загружена'],
+            'has_card' => true,
+            'card_url' => $card->previewUrl(),
+            'friend_request_card_id' => $card->id,
+            'friend_request_card_media_id' => $card->media_id,
         ]);
     }
 

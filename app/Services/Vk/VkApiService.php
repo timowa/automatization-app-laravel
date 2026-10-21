@@ -422,14 +422,185 @@ VKSCRIPT;
      * @throws VKApiException
      * @throws VKClientException
      */
-    public function sendDirectMessage(int $userId, string $message): mixed
+    public function sendDirectMessage(int $userId, string $message, ?string $attachment = null): mixed
     {
-        return $this->client->messages()->send($this->token, [
+        $params = [
             'peer_id' => $userId,
             'message' => $message,
             'random_id' => random_int(1, 2_147_483_647),
             'dont_parse_links' => 1,
+        ];
+
+        if ($attachment !== null && $attachment !== '') {
+            $params['attachment'] = $attachment;
+        }
+
+        return $this->client->messages()->send($this->token, $params);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function getFriendRequests(): array
+    {
+        $items = [];
+        $offset = 0;
+        $count = 1000;
+
+        do {
+            $response = $this->client->friends()->getRequests($this->token, [
+                'count' => $count,
+                'offset' => $offset,
+                'extended' => 1,
+                'need_mutual' => 1,
+                'out' => 0,
+                'need_viewed' => 1,
+            ]);
+
+            $batch = $response['items'] ?? [];
+            if (! is_array($batch)) {
+                break;
+            }
+
+            foreach ($batch as $item) {
+                if (is_array($item)) {
+                    $items[] = $item;
+                }
+            }
+
+            $offset += count($batch);
+
+            if ($offset < (int) ($response['count'] ?? 0) && $batch !== []) {
+                usleep(350_000);
+            }
+        } while ($batch !== [] && $offset < (int) ($response['count'] ?? 0));
+
+        return $items;
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function hasOutgoingMessageWithUser(int $userId): bool
+    {
+        $response = $this->client->messages()->getHistory($this->token, [
+            'user_id' => $userId,
+            'count' => 20,
+            'rev' => 0,
         ]);
+
+        $items = $response['items'] ?? [];
+        if (! is_array($items)) {
+            return false;
+        }
+
+        foreach ($items as $item) {
+            if (! is_array($item)) {
+                continue;
+            }
+
+            if ((int) ($item['out'] ?? 0) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Загружает локальный файл как фото для вложений в личные сообщения.
+     *
+     * @return int media id из photos.saveMessagesPhoto
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     * @throws \RuntimeException
+     */
+    public function uploadMessagesPhoto(string $absolutePath): int
+    {
+        if (! is_file($absolutePath)) {
+            Log::channel('vk-images')->error('Файл визитки не найден перед загрузкой во ВК', [
+                'path' => $absolutePath,
+            ]);
+            throw new \RuntimeException('Файл визитки не найден');
+        }
+
+        $imageInfo = @getimagesize($absolutePath);
+        Log::channel('vk-images')->info('Начало загрузки визитки во ВК', [
+            'path' => $absolutePath,
+            'size_bytes' => filesize($absolutePath),
+            'image_info' => $imageInfo,
+        ]);
+
+        try {
+            $address = $this->client->photos()->getMessagesUploadServer($this->token);
+            Log::channel('vk-images')->info('Получен адрес для загрузки визитки', [
+                'address' => $address,
+            ]);
+
+            $upload = $this->client->getRequest()->upload($address['upload_url'], 'photo', $absolutePath);
+            Log::channel('vk-images')->info('Ответ ВК по загрузке визитки на upload-сервер', [
+                'response' => $upload,
+                'params' => [
+                    'upload_url' => $address['upload_url'] ?? null,
+                    'parameter_name' => 'photo',
+                    'path' => $absolutePath,
+                ],
+            ]);
+
+            if (empty($upload['photo'])) {
+                Log::channel('vk-images')->error('Upload-сервер ВК вернул пустое поле photo', [
+                    'path' => $absolutePath,
+                    'size_bytes' => is_file($absolutePath) ? filesize($absolutePath) : null,
+                    'upload_response' => $upload,
+                    'upload_url' => $address['upload_url'] ?? null,
+                ]);
+                throw new \RuntimeException('Не удалось загрузить визитку на сервер ВКонтакте: пустой ответ photo');
+            }
+
+            $saveParams = [
+                'photo' => $upload['photo'],
+                'server' => $upload['server'],
+                'hash' => $upload['hash'],
+            ];
+            $saved = $this->client->photos()->saveMessagesPhoto($this->token, $saveParams);
+
+            Log::channel('vk-images')->info('Ответ ВК по сохранению визитки', [
+                'response' => $saved,
+                'params' => $saveParams,
+            ]);
+
+            $mediaId = (int) ($saved[0]['id'] ?? 0);
+            if ($mediaId <= 0) {
+                Log::channel('vk-images')->error('photos.saveMessagesPhoto не вернул id визитки', [
+                    'path' => $absolutePath,
+                    'save_response' => $saved,
+                    'save_params' => $saveParams,
+                ]);
+                throw new \RuntimeException('ВКонтакте не вернул id визитки');
+            }
+
+            Log::channel('vk-images')->info('Визитка успешно сохранена во ВК', [
+                'media_id' => $mediaId,
+                'owner_id' => $saved[0]['owner_id'] ?? null,
+            ]);
+
+            return $mediaId;
+        } catch (\Throwable $th) {
+            Log::channel('vk-images')->error('Ошибка загрузки визитки во ВК: '.$th->getMessage(), [
+                'path' => $absolutePath,
+                'exception' => $th::class,
+                'code' => $th->getCode(),
+                'file' => $th->getFile(),
+                'line' => $th->getLine(),
+                'prev' => $th->getPrevious(),
+            ]);
+            throw $th;
+        }
     }
 
     public function getClient(): VKApiClient
