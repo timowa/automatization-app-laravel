@@ -51,6 +51,19 @@ Artisan-команды для фоновых задач: проверка ток
 4. Формирует текст отчёта и отправляет через `vkApi->sendTechMessage()`.
 5. Логирует: info в канал `job` при успехе, warning в `job` + error в `vk` при ошибке.
 
+### vk:notify-changelog
+
+**Файл:** `app/Console/Commands/NotifyChangelogCommand.php`
+
+Уведомление о последней версии продукта из `config/changelog.php`. Запускается при деплое на прод (GitHub Actions).
+
+Поток:
+1. Берёт первый релиз через `ChangelogService::latest(1)`.
+2. Формирует текст: версия, дата и список изменений.
+3. Отправляет через `vkApi->sendTechMessage()` фиксированным получателям от имени сообщества.
+4. Логирует: info в канал `job` при успехе, warning в `job` + error в `vk` при ошибке.
+5. Если релизов нет — завершается успешно без отправки.
+
 ### vk:sync-users
 
 **Файл:** `app/Console/Commands/SyncVkUsersCommand.php`

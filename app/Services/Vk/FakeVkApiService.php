@@ -173,6 +173,12 @@ class FakeVkApiService extends VkApiService
         return fake()->unique()->numberBetween(2, 1_000_000);
     }
 
+    public function sendTechMessage(string $text): void
+    {
+        $this->calls[] = ['method' => 'sendTechMessage', 'message' => $text];
+        $this->maybeFail('sendTechMessage');
+    }
+
     /**
      * @return list<array<string, mixed>>
      */
