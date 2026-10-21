@@ -109,7 +109,7 @@ class CreateVkCommentJob implements ShouldQueue
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
-                'error_message' => $e->getErrorMessage(),
+                'error_message' => $e->getErrorMessage() ?? '',
                 'description' => $e->getDescription(),
                 'vk_error' => $e->getError(),
             ]);
