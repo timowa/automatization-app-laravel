@@ -432,6 +432,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         const rows = tasks.map((task) => `
             <tr>
+                <td class="px-2 py-1 text-gray-500">${task.id ?? '—'}</td>
                 <td class="px-2 py-1">${taskStatusIcon(task)}</td>
                 <td class="px-2 py-1">${task.title}</td>
                 <td class="px-2 py-1 text-gray-600">${task.status_label}</td>
@@ -443,6 +444,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <table class="min-w-[32rem] text-sm">
                 <thead>
                     <tr class="text-left text-gray-500">
+                        <th class="px-2 py-1">ID</th>
                         <th class="px-2 py-1">Статус</th>
                         <th class="px-2 py-1">Задача</th>
                         <th class="px-2 py-1">Состояние</th>

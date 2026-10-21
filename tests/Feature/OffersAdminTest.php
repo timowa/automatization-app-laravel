@@ -192,6 +192,7 @@ class OffersAdminTest extends TestCase
             ->getJson('/offers/'.$offer->id.'/tasks');
 
         $response->assertOk();
+        $this->assertIsInt($response->json('tasks.0.id'));
         $response->assertJsonPath('tasks.0.title', 'Публикация истории');
         $response->assertJsonPath('tasks.0.tooltip', 'Успешно');
         $response->assertJsonPath('tasks.1.tooltip', 'flood control');
