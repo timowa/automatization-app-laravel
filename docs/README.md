@@ -17,6 +17,7 @@
 | [enums.md](enums.md) | Перечисления (статусы, типы, категории) |
 | [actions.md](actions.md) | Actions — слой бизнес-логики |
 | [admin-panel.md](admin-panel.md) | Админ-панель: контроллеры, middleware, авторизация |
+| [friend-request-welcome.md](friend-request-welcome.md) | Автоприветствие на заявку в друзья: настройки, визитка, sync/process |
 | [console-commands.md](console-commands.md) | Artisan-команды |
 | [helpers.md](helpers.md) | Вспомогательные классы, функции, трейты, исключения |
 

@@ -54,6 +54,14 @@
 
 Подробнее: `docs/vk-wallpost-templates.md`.
 
+### FriendRequestWelcomeText
+
+**Файл:** `app/Helpers/FriendRequestWelcomeText.php`
+
+Дефолтный текст автоприветствия, подстановка имени агента, сборка attachment `photo{owner}_{media}`.
+
+Подробнее: `docs/friend-request-welcome.md`.
+
 ## Глобальные функции (app/helpers.php)
 
 **Файл:** `app/helpers.php`

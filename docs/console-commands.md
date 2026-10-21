@@ -86,6 +86,24 @@ Artisan-команды для фоновых задач: проверка ток
 - При ошибке VK API по одному агенту обработка продолжается для остальных.
 - Если активных офферов или постов нет — команда завершается успешно с соответствующей записью в лог.
 
+### vk:sync-friend-requests
+
+**Файл:** `app/Console/Commands/SyncFriendRequestsCommand.php`
+
+Расписание: `0 0,6,12,18 * * *` (4 раза в сутки).
+
+Для агентов с `friend_request_welcome_enabled` диспатчит `SyncAgentFriendRequestsJob` (со сдвигом delay, чтобы не упираться в rate limit).
+
+### vk:process-friend-request-welcome
+
+**Файл:** `app/Console/Commands/ProcessFriendRequestWelcomeCommand.php`
+
+Расписание: каждые 5 минут.
+
+Берёт одну запись `agent_vk_friend_requests` с `message_id IS NULL` (`lockForUpdate`) и диспатчит `ProcessFriendRequestWelcomeJob`.
+
+Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
+
 ### app:truncate
 
 **Файл:** `app/Console/Commands/TruncateCommand.php`

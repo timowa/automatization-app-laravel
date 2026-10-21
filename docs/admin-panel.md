@@ -22,7 +22,7 @@
 
 CRUD агентов и управление токенами.
 
-- `list()` — список агентов (view `agents-list`).
+- `list()` — список агентов (view `agents-list`). В таблице: поздравления ДР, автоприветствие, визитка; ColVis с сохранением в `localStorage`.
 - `create()` — форма создания (view `agent-form`).
 - `store(StoreAgentRequest)` — создание агента. Нормализует телефон (только цифры). Логирует.
 - `edit(int $id)` — форма редактирования (view `agent-form`).
@@ -30,8 +30,13 @@ CRUD агентов и управление токенами.
 - `delete(Request, int $id)` — удаление с проверкой пароля (config `app.rudenko_password`).
 - `changeToken(int $id)` — форма обновления токена (view `agent-token`).
 - `updateToken(Request, int $id)` — парсит ссылку авторизации VK (extract access_token, user_id из URL fragment), создаёт/обновляет `VkUser`.
+- `friends(Request, int $id, ListAgentVkFriendsAction)` — страница друзей агента (view `agent-friends`), фильтры и ColVis.
+- `updateSettings(UpdateAgentSettingsRequest, int $id)` — JSON: поздравления ДР + автоприветствие (флаг/текст).
+- `uploadWelcomeCard(UploadAgentWelcomeCardRequest, int $id, StoreAgentWelcomeCardAction, VkApiService)` — загрузка визитки локально + во ВК, привязка к `settings.friend_request_card_id`.
 
 Ответы `store`, `save`, `delete`, `updateToken` — через `viewJson()` хелпер (JSON с success/messages/redirect).
+
+Подробнее про автоприветствие: [friend-request-welcome.md](friend-request-welcome.md).
 
 ## Middleware
 
@@ -60,3 +65,15 @@ CRUD агентов и управление токенами.
 **Файл:** `app/Http/Requests/UpdateAgentRequest.php`
 
 Валидация обновления агента: аналогично StoreAgentRequest, но unique с ignore текущего ID.
+
+### UpdateAgentSettingsRequest
+
+**Файл:** `app/Http/Requests/UpdateAgentSettingsRequest.php`
+
+Настройки агента: флаги/тексты поздравлений ДР, `friend_request_welcome_enabled`, `friend_request_welcome_text`.
+
+### UploadAgentWelcomeCardRequest
+
+**Файл:** `app/Http/Requests/UploadAgentWelcomeCardRequest.php`
+
+Загрузка визитки: изображение (jpeg/png/webp), лимит размера файла.

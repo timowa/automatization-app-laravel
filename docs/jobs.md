@@ -170,3 +170,9 @@
 3. Если все товары в одной группе — использует VKScript `execute()` для пакетного удаления.
 4. Если в разных группах — поочерёдно вызывает `vkApi->archiveProduct()` с `usleep(350_000)`.
 5. Обновляет `is_archived = true` для всех товаров в БД.
+
+### SyncAgentFriendRequestsJob / ProcessFriendRequestWelcomeJob
+
+Не относятся к `PublicationTask`. Синхронизация входящих заявок в друзья и отправка автоприветствия в ЛС.
+
+Подробнее: [friend-request-welcome.md](friend-request-welcome.md).

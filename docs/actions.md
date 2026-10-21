@@ -57,3 +57,13 @@
 Используется:
 - Консольной командой `vk:sync-users` (массовая синхронизация).
 - `AgentController::save()` (после обновления агента).
+
+### StoreAgentWelcomeCardAction
+
+**Файл:** `app/Actions/Vk/StoreAgentWelcomeCardAction.php`
+
+Сохраняет визитку агента локально (оригинал + thumb) и фиксирует `media_id` после загрузки во ВК.
+
+Поток: `writeLocalFiles()` → (контроллер грузит фото через `VkApiService::uploadMessagesPhoto`) → `persist()` (переименовывает файлы, обновляет `agent_welcome_cards` и `settings.friend_request_card_id`).
+
+Подробнее: [friend-request-welcome.md](friend-request-welcome.md).

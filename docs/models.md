@@ -17,6 +17,8 @@ Fillable: `name`, `phone`.
 Связи:
 - `vkUser()` — HasOne `VkUser`.
 - `offers()` — HasMany `Offer`.
+- `setting()` — HasOne `Setting`.
+- `welcomeCards()` / заявки — см. [friend-request-welcome.md](friend-request-welcome.md).
 
 ### Offer
 
@@ -153,12 +155,28 @@ Cast: `datetime` → datetime.
 
 > Поле `is_active` в таблице `offers` — используется в `GetStatsCommand` для фильтрации активных постов, но не объявлено в fillable модели `Offer`. Добавляется на уровне БД.
 
+### Setting
+
+**Файл:** `app/Models/Setting.php`
+
+Таблица: `settings`. Настройки агента (поздравления ДР, автоприветствие).
+
+Доп. поля автоприветствия: `friend_request_welcome_enabled`, `friend_request_welcome_text`, `friend_request_card_id`.
+
+Связи: `agent()`, `welcomeCard()` → `AgentWelcomeCard`.
+
+### AgentWelcomeCard / AgentVkFriendRequest
+
+См. [friend-request-welcome.md](friend-request-welcome.md).
+
 ## Диаграмма связей
 
 ```
 Agent ──< Offer ──< VkWallPost
    │       │         
-   └─VkUser │         
+   ├─VkUser │         
+   ├─Setting ──> AgentWelcomeCard
+   └─AgentVkFriendRequest
            │         
        Publication ──< PublicationTask
            │                │

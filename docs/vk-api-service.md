@@ -75,6 +75,24 @@
 
 Отправляет техническое уведомление через `messages.send` в группу уведомлений. Токен и peer_ids берутся из `config('vk.notify_group_token')` и `config('vk.notify_peer_ids')`.
 
+#### getFriendRequests(): array
+
+Входящие заявки в друзья (`friends.getRequests`, extended). Используется синхронизацией автоприветствия.
+
+#### hasOutgoingMessageWithUser(int $userId): bool
+
+Проверяет, писал ли агент пользователю (`messages.getHistory`).
+
+#### uploadMessagesPhoto(string $absolutePath): int
+
+Загрузка фото для вложения в ЛС: upload server → save → возвращает `media_id` (без `owner_id` в строке; owner берётся из `vk_users.vk_user_id`).
+
+#### sendDirectMessage(int $userId, string $message, ?string $attachment = null): mixed
+
+Личное сообщение (`messages.send`), опционально с attachment вида `photo{owner}_{media}`.
+
+Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
+
 ## FakeVkApiService
 
 **Файл:** `app/Services/Vk/FakeVkApiService.php`
