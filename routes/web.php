@@ -3,6 +3,7 @@
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChangelogController;
+use App\Http\Controllers\MiscController;
 use App\Http\Controllers\OfferController;
 use App\Http\Controllers\StatController;
 use App\Http\Controllers\VkWallPostController;
@@ -32,6 +33,12 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::post('/agents/update-token/{id}', [AgentController::class, 'updateToken']);
     Route::post('/agents/token-permissions/{id}', [AgentController::class, 'getTokenPermissions']);
     Route::get('/posts', [VkWallPostController::class, 'index']);
+    Route::get('/misc', [MiscController::class, 'index'])->name('misc');
+    Route::put('/misc/texts/{key}', [MiscController::class, 'updateText'])->name('misc.texts.update');
+    Route::post('/misc/comments', [MiscController::class, 'storeComment'])->name('misc.comments.store');
+    Route::put('/misc/comments/{id}', [MiscController::class, 'updateComment'])->whereNumber('id')->name('misc.comments.update');
+    Route::delete('/misc/comments/{id}', [MiscController::class, 'destroyComment'])->whereNumber('id')->name('misc.comments.destroy');
     Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog');
     Route::post('/changelog/seen', [ChangelogController::class, 'markSeen'])->name('changelog.seen');
 });
+

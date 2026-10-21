@@ -57,11 +57,15 @@ final class BirthdayWishEligibility
         return $text === '' ? null : $text;
     }
 
-    public static function messageForFriend(
+    /**
+     * Шаблон сообщения: кастом агента → стандарт из БД.
+     * null — поздравления для пола выключены или пол неизвестен.
+     * пустая строка не возвращается: отсутствие стандарта → null из генератора,
+     * job отличает «выключено» (isEnabled=false) от «нет текста» отдельно.
+     */
+    public static function messageTemplateForFriend(
         Setting $setting,
         ?int $sex,
-        string $friendName,
-        string $agentName,
         ?BirthdayWishTextGenerator $textGenerator = null,
     ): ?string {
         if (! self::isEnabledForSex($setting, $sex)) {
@@ -75,7 +79,7 @@ final class BirthdayWishEligibility
 
         $generator = $textGenerator ?? new BirthdayWishTextGenerator;
 
-        return $generator->generate($friendName, $agentName);
+        return $generator->templateForSex($sex);
     }
 
     public static function statusForSex(Setting $setting, ?int $sex): BirthdayWishGenderStatus

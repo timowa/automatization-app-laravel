@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\Agent;
 use App\Models\AgentVkFriend;
+use App\Services\StandardTextRenderer;
 use App\Services\Vk\Message\BirthdayDiscountTextGenerator;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
@@ -31,13 +32,13 @@ class BirthdayDiscountJob implements ShouldQueue
 
     public function handle(VkApiService $vkApi, BirthdayDiscountTextGenerator $textGenerator): void
     {
-        $agent = Agent::find($this->agentId);
+        $agent = Agent::with(['setting', 'vkUser'])->find($this->agentId);
         $friend = AgentVkFriend::where('agent_id', $this->agentId)
             ->where('user_id', $this->friendUserId)
             ->first();
 
         if (! $agent || ! $friend) {
-            Log::channel('job')->warning('Скидка ко дню рождения не отправлена: данные не найдены', [
+            Log::channel('job')->warning('Скидка на день рождения не отправлена: данные не найдены', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);
@@ -47,7 +48,7 @@ class BirthdayDiscountJob implements ShouldQueue
 
         $vkUser = $agent->vkUser;
         if (! $vkUser || $vkUser->getToken() === '' || ! $vkUser->is_token_available) {
-            Log::channel('job')->warning('Скидка ко дню рождения не отправлена: токен недоступен', [
+            Log::channel('job')->warning('Скидка на день рождения не отправлена: токен недоступен', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);
@@ -56,7 +57,7 @@ class BirthdayDiscountJob implements ShouldQueue
         }
 
         if (! $agent->setting?->wish_happy_birthday_male && ! $agent->setting?->wish_happy_birthday_female) {
-            Log::channel('job')->warning('Скидка ко дню рождения отключена в настройках агента', [
+            Log::channel('job')->warning('Скидка на день рождения не отправлена: отключена в настройках агента', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);
@@ -64,19 +65,31 @@ class BirthdayDiscountJob implements ShouldQueue
             return;
         }
 
+        $template = $textGenerator->template();
+        if ($template === null || trim($template) === '') {
+            Log::channel('job')->warning('Скидка на день рождения не отправлена: нет текста', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+            ]);
+
+            return;
+        }
+
+        $message = StandardTextRenderer::render(
+            $template,
+            StandardTextRenderer::contextFrom($vkUser, $friend)
+        );
+
         try {
             $vkApi->setToken($vkUser->getToken());
-            $vkApi->sendDirectMessage(
-                $this->friendUserId,
-                $textGenerator->generate($friend->first_name, $agent->name)
-            );
+            $vkApi->sendDirectMessage($this->friendUserId, $message);
 
-            Log::channel('job')->info('Скидка ко дню рождения отправлена', [
+            Log::channel('job')->info('Скидка на день рождения отправлена', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);
         } catch (\Throwable $e) {
-            Log::channel('job')->warning('Ошибка отправки скидки ко дню рождения', [
+            Log::channel('job')->warning('Ошибка отправки скидки на день рождения', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
             ]);

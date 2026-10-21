@@ -4,22 +4,24 @@ declare(strict_types=1);
 
 namespace App\Helpers;
 
+use App\Enums\StandardTextKey;
 use App\Models\Setting;
+use App\Services\StandardTextService;
 
 final class FriendRequestWelcomeText
 {
-    public static function resolve(?Setting $setting, string $agentName): string
-    {
+    public static function resolveTemplate(
+        ?Setting $setting,
+        ?StandardTextService $standardTexts = null,
+    ): ?string {
         $custom = trim((string) ($setting?->friend_request_welcome_text ?? ''));
         if ($custom !== '') {
             return $custom;
         }
 
-        $name = trim($agentName) !== '' ? trim($agentName) : 'агент';
+        $service = $standardTexts ?? new StandardTextService;
 
-        return 'Здравствуйте! Рад знакомству. Я '.$name
-            .', агент недвижимости компании «Брокер Плюс». '
-            .'Вы хотели задать вопрос по недвижимости или у вас другое дело?';
+        return $service->body(StandardTextKey::FriendRequestWelcome);
     }
 
     public static function photoAttachment(int $ownerId, int $mediaId): string

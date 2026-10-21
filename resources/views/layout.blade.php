@@ -16,6 +16,7 @@
                     <div class="flex gap-6">
                         <a href="/agents" class="font-bold text-lg">Агенты</a>
                         <a href="/posts" class="font-bold text-lg">Посты</a>
+                        <a href="/misc" class="font-bold text-lg">Прочее</a>
                     </div>
                     <div class="flex items-center gap-4">
                         @include('partials.version-menu')

@@ -24,12 +24,13 @@ class FriendRequestWelcomeTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_default_welcome_text_contains_agent_name(): void
+    public function test_default_welcome_text_contains_placeholders(): void
     {
-        $text = FriendRequestWelcomeText::resolve(null, 'Ирина Петрова');
+        $text = FriendRequestWelcomeText::resolveTemplate(null);
 
-        $this->assertStringContainsString('Ирина Петрова', $text);
-        $this->assertStringContainsString('Брокер Плюс', $text);
+        $this->assertNotNull($text);
+        $this->assertStringContainsString('{{agent_name}}', $text);
+        $this->assertStringContainsString('{{brokerplus}}', $text);
     }
 
     public function test_photo_attachment_uses_owner_and_media_id(): void
@@ -151,6 +152,8 @@ class FriendRequestWelcomeTest extends TestCase
             'vk_user_id' => 555001,
             'is_token_available' => true,
             'vk_token' => 'token',
+            'first_name' => 'Мария',
+            'last_name' => 'Иванова',
         ]);
         $card = AgentWelcomeCard::query()->create([
             'agent_id' => $agent->id,

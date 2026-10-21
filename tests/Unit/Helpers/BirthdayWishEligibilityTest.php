@@ -58,17 +58,17 @@ class BirthdayWishEligibilityTest extends TestCase
 
         $this->assertSame(
             'Привет, мужчина',
-            BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value, 'Иван', 'Агент')
+            BirthdayWishEligibility::messageTemplateForFriend($setting, Sex::MALE->value)
         );
         $this->assertNull(
-            BirthdayWishEligibility::messageForFriend($setting, Sex::FEMALE->value, 'Анна', 'Агент')
+            BirthdayWishEligibility::messageTemplateForFriend($setting, Sex::FEMALE->value)
         );
         $this->assertNull(
-            BirthdayWishEligibility::messageForFriend($setting, Sex::UNSPECIFIED->value, 'Иван', 'Агент')
+            BirthdayWishEligibility::messageTemplateForFriend($setting, Sex::UNSPECIFIED->value)
         );
     }
 
-    public function test_message_falls_back_to_template_when_text_empty(): void
+    public function test_message_falls_back_to_standard_text_when_custom_empty(): void
     {
         $setting = new Setting([
             'wish_happy_birthday_male' => true,
@@ -79,19 +79,19 @@ class BirthdayWishEligibilityTest extends TestCase
 
         $generator = new class extends BirthdayWishTextGenerator
         {
-            public function generate(string $friendName, string $agentName): string
+            public function templateForSex(?int $sex): ?string
             {
-                return "Шаблон: {$friendName} / {$agentName}";
+                return 'Шаблон для '.$sex;
             }
         };
 
         $this->assertSame(
-            'Шаблон: Иван / Агент',
-            BirthdayWishEligibility::messageForFriend($setting, Sex::MALE->value, 'Иван', 'Агент', $generator)
+            'Шаблон для '.Sex::MALE->value,
+            BirthdayWishEligibility::messageTemplateForFriend($setting, Sex::MALE->value, $generator)
         );
         $this->assertSame(
-            'Шаблон: Анна / Агент',
-            BirthdayWishEligibility::messageForFriend($setting, Sex::FEMALE->value, 'Анна', 'Агент', $generator)
+            'Шаблон для '.Sex::FEMALE->value,
+            BirthdayWishEligibility::messageTemplateForFriend($setting, Sex::FEMALE->value, $generator)
         );
     }
 

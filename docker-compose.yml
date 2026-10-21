@@ -9,6 +9,8 @@ services:
     volumes:
       - ./:/var/www/html
       - ./docker/php/uploads.ini:/usr/local/etc/php/conf.d/uploads.ini
+      # Named volume: Blade touch()/utime fails on Windows bind mounts
+      - laravel-views:/var/www/html/storage/framework/views
     networks:
       - vk19-network
     depends_on:
@@ -24,6 +26,7 @@ services:
     volumes:
       - ./:/var/www/html
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - laravel-views:/var/www/html/storage/framework/views
     networks:
       - vk19-network
     depends_on:
@@ -53,6 +56,7 @@ services:
 
 volumes:
   mysql-data:
+  laravel-views:
 
 networks:
   vk19-network:

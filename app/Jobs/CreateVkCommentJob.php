@@ -11,6 +11,7 @@ use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
+use App\Services\StandardTextRenderer;
 use App\Services\Vk\Comment\CommentTextProvider;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
@@ -71,7 +72,23 @@ class CreateVkCommentJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $message = $commentTextProvider->getRandomText();
+            $template = $commentTextProvider->getRandomText();
+            if ($template === null || trim($template) === '') {
+                Log::channel('job')->warning('Комментарий не создан: нет стандартных текстов комментариев', [
+                    'task_id' => $this->taskId,
+                ]);
+                $task->update([
+                    'status' => PublicationTaskStatus::FAILED,
+                    'error' => 'Нет стандартных текстов комментариев',
+                ]);
+
+                return;
+            }
+
+            $message = StandardTextRenderer::render(
+                $template,
+                StandardTextRenderer::contextFrom($vkUser)
+            );
 
             $result = $vkApi->createComment((int) $post->owner_id, (int) $post->post_id, $message);
 

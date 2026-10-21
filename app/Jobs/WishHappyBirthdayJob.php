@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Helpers\BirthdayWishEligibility;
 use App\Models\Agent;
 use App\Models\AgentVkFriend;
+use App\Services\StandardTextRenderer;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -31,7 +32,7 @@ class WishHappyBirthdayJob implements ShouldQueue
 
     public function handle(VkApiService $vkApi): void
     {
-        $agent = Agent::with('setting')->find($this->agentId);
+        $agent = Agent::with(['setting', 'vkUser'])->find($this->agentId);
         $friend = AgentVkFriend::where('agent_id', $this->agentId)
             ->where('user_id', $this->friendUserId)
             ->first();
@@ -74,22 +75,7 @@ class WishHappyBirthdayJob implements ShouldQueue
             return;
         }
 
-        if (! BirthdayWishEligibility::ageInRange($friend->bdate)) {
-            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: возраст вне диапазона 18–70 или нет года рождения', [
-                'agent_id' => $this->agentId,
-                'friend_user_id' => $this->friendUserId,
-            ]);
-
-            return;
-        }
-
-        $message = BirthdayWishEligibility::messageForFriend(
-            $setting,
-            $friend->sex,
-            (string) $friend->first_name,
-            (string) $agent->name,
-        );
-        if ($message === null) {
+        if (! BirthdayWishEligibility::isEnabledForSex($setting, $friend->sex)) {
             Log::channel('job')->warning('Поздравление с днём рождения не отправлено: выключена настройка для пола получателя', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,
@@ -98,6 +84,22 @@ class WishHappyBirthdayJob implements ShouldQueue
 
             return;
         }
+
+        $template = BirthdayWishEligibility::messageTemplateForFriend($setting, $friend->sex);
+        if ($template === null || trim($template) === '') {
+            Log::channel('job')->warning('Поздравление с днём рождения не отправлено: нет текста', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+                'sex' => $friend->sex,
+            ]);
+
+            return;
+        }
+
+        $message = StandardTextRenderer::render(
+            $template,
+            StandardTextRenderer::contextFrom($vkUser, $friend)
+        );
 
         try {
             $vkApi->setToken($vkUser->getToken());

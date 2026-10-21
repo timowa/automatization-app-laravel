@@ -4,24 +4,17 @@ declare(strict_types=1);
 
 namespace App\Services\Vk\Message;
 
+use App\Enums\StandardTextKey;
+use App\Services\StandardTextService;
+
 final class BirthdayDiscountTextGenerator
 {
-    private const TEXTS = [
-        <<<'TEXT'
-{{friend_name}}, ещё раз поздравляю Вас с днём рождения!
+    public function __construct(
+        private readonly StandardTextService $standardTexts = new StandardTextService,
+    ) {}
 
-В честь праздника хочу подарить Вам персональную скидку на мои услуги. Если вопрос с недвижимостью станет актуальным, напишите мне — с удовольствием расскажу подробности.
-
-С уважением, Команда Брокер Плюс,  {{agent_name}}
-TEXT,
-    ];
-
-    public function generate(string $friendName, string $agentName): string
+    public function template(): ?string
     {
-        return str_replace(
-            ['{{friend_name}}', '{{agent_name}}'],
-            [$friendName, $agentName],
-            self::TEXTS[array_rand(self::TEXTS)]
-        );
+        return $this->standardTexts->body(StandardTextKey::BirthdayDiscount);
     }
 }

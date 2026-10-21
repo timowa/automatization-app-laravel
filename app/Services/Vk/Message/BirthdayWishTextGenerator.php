@@ -4,33 +4,28 @@ declare(strict_types=1);
 
 namespace App\Services\Vk\Message;
 
+use App\Enums\StandardTextKey;
+use App\Enums\Vk\Sex;
+use App\Services\StandardTextService;
+
 class BirthdayWishTextGenerator
 {
-    private const TEXTS = [
-        <<<'TEXT'
-Здравствуйте, {{friend_name}}! Поздравляю Вас с днём рождения! 🎉
+    public function __construct(
+        private readonly StandardTextService $standardTexts = new StandardTextService,
+    ) {}
 
-Желаю Вам здоровья, благополучия и побольше приятных событий в новом году жизни. Пусть рядом будут хорошие люди, а поводов для радости становится только больше.
-
-Хорошего Вам дня и отличного настроения! 😊
-
-TEXT,
-        <<<'TEXT'
-{{friend_name}}, здравствуйте! Поздравляю Вас с днём рождения! 🎉
-
-Желаю, чтобы этот год был наполнен приятными событиями, хорошими встречами и новыми возможностями. Пусть всё складывается именно так, как Вам хочется, а дома и в жизни всегда царят тепло и уют.
-
-Отличного Вам настроения и прекрасного дня! 😊
-
-TEXT,
-    ];
-
-    public function generate(string $friendName, string $agentName): string
+    public function templateForSex(?int $sex): ?string
     {
-        return str_replace(
-            ['{{friend_name}}', '{{agent_name}}'],
-            [$friendName, $agentName],
-            self::TEXTS[array_rand(self::TEXTS)]
-        );
+        $key = match ($sex) {
+            Sex::MALE->value => StandardTextKey::BirthdayWishMale,
+            Sex::FEMALE->value => StandardTextKey::BirthdayWishFemale,
+            default => null,
+        };
+
+        if ($key === null) {
+            return null;
+        }
+
+        return $this->standardTexts->body($key);
     }
 }

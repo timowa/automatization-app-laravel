@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Helpers\FriendRequestWelcomeText;
+use App\Models\AgentVkFriend;
 use App\Models\AgentVkFriendRequest;
+use App\Services\StandardTextRenderer;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -85,22 +87,41 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
         try {
             $vkApi->setToken($vkUser->getToken());
 
-//            if ($vkApi->hasOutgoingMessageWithUser($request->user_id)) {
-//                $request->message_id = AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL;
-//                $request->save();
-//
-//                Log::channel('job')->info('Автоприветствие пропущено: агент уже писал пользователю', [
-//                    'agent_id' => $agent->id,
-//                    'user_id' => $request->user_id,
-//                    'message_id' => AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL,
-//                ]);
-//
-//                return;
-//            }
+            if ($vkApi->hasOutgoingMessageWithUser($request->user_id)) {
+                $request->message_id = AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL;
+                $request->save();
+
+                Log::channel('job')->info('Автоприветствие пропущено: агент уже писал пользователю', [
+                    'agent_id' => $agent->id,
+                    'user_id' => $request->user_id,
+                    'message_id' => AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL,
+                ]);
+
+                return;
+            }
 
             usleep(350_000);
 
-            $message = FriendRequestWelcomeText::resolve($setting, (string) $agent->name);
+            $template = FriendRequestWelcomeText::resolveTemplate($setting);
+            if ($template === null || trim($template) === '') {
+                Log::channel('job')->warning('Автоприветствие не отправлено: нет текста', [
+                    'agent_id' => $agent->id,
+                    'user_id' => $request->user_id,
+                ]);
+
+                return;
+            }
+
+            $friendContext = new AgentVkFriend([
+                'first_name' => (string) ($request->first_name ?? ''),
+                'last_name' => (string) ($request->last_name ?? ''),
+            ]);
+
+            $message = StandardTextRenderer::render(
+                $template,
+                StandardTextRenderer::contextFrom($vkUser, $friendContext)
+            );
+
             $attachment = null;
             $mediaId = (int) ($setting->welcomeCard?->media_id ?? 0);
             $ownerId = (int) $vkUser->vk_user_id;

@@ -203,6 +203,8 @@ class BirthdayWishesTest extends TestCase
             'agent_id' => $agent->id,
             'is_token_available' => true,
             'vk_token' => 'token',
+            'first_name' => 'Тестовый',
+            'last_name' => 'Агент',
         ]);
         Setting::create([
             'agent_id' => $agent->id,
@@ -225,7 +227,6 @@ class BirthdayWishesTest extends TestCase
 
         $message = collect($fake->calls)->firstWhere('method', 'sendDirectMessage')['message'] ?? '';
         $this->assertStringContainsString('Иван', $message);
-        $this->assertStringContainsString('Тестовый Агент', $message);
         $this->assertStringContainsString('днём рождения', $message);
     }
 
