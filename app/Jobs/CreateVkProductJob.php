@@ -84,11 +84,10 @@ class CreateVkProductJob implements ShouldQueue
                 return;
             }
 
-            $acceptingCityValues = array_filter(
-                City::cases(),
-                fn (City $c) => in_array($offerCity, $c->acceptedCities(), true)
+            $acceptingCityValues = array_map(
+                fn (City $c) => $c->value,
+                $offerCity->acceptedGroupCities()
             );
-            $acceptingCityValues = array_map(fn (City $c) => $c->value, $acceptingCityValues);
 
             $cityGroupIds = VkGroup::whereIn('city', $acceptingCityValues)->pluck('group_id')->toArray();
             if (empty($cityGroupIds)) {

@@ -79,6 +79,10 @@ class CreateVkLoopStoryJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
+            if (! $vkApi->wallPostExists($post->getFullId())) {
+                throw new NotFoundException('Пост удалён или не найден во ВКонтакте');
+            }
+
             $context = (new VkStoriesContextFactory)->getContext((int) $post->id);
             $template = $this->resolveTemplate($context);
             $image = (new VkStoriesGenerator)->generate($context, $template);
@@ -86,7 +90,7 @@ class CreateVkLoopStoryJob implements ShouldQueue
             try {
                 $res = $vkApi->storiesPost($post->getFullId(), $image);
 
-                if (($res['count'] ?? 0) < 1) {
+                if (! VkApiService::isStorySaveSuccessful($res)) {
                     throw new VkStoryNotSavedException(
                         'ВКонтакте не сохранил историю (count = 0). Ответ загрузки: '
                         .json_encode($res, JSON_UNESCAPED_UNICODE)
@@ -117,8 +121,18 @@ class CreateVkLoopStoryJob implements ShouldQueue
                 'post_id' => $post->id,
             ]);
 
-            $taskDependencyResolver->release($this->taskId);
-            $taskDispatcher->dispatch($task->publication_id);
+            try {
+                $taskDependencyResolver->release($this->taskId);
+                $taskDispatcher->dispatch($task->publication_id);
+            } catch (\Throwable $e) {
+                Log::channel('vk')->error($e->getMessage(), [
+                    'task_id' => $this->taskId,
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                Log::channel('job')->warning('Loop-история опубликована, но не удалось продолжить цепочку задач', [
+                    'task_id' => $this->taskId,
+                ]);
+            }
         } catch (StoryPublicationSkippedException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->warning($e->getMessage(), ['task_id' => $this->taskId]);

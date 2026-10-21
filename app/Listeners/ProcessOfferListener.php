@@ -40,6 +40,7 @@ class ProcessOfferListener implements ShouldQueue
 
         if (is_null($scenario)) {
             Log::channel('job')->warning('Сценарий не был выбран');
+            $newOffer->update(['skip_reason' => 'Сценарий не выбран']);
             return;
         }
 

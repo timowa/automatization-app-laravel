@@ -12,16 +12,12 @@ enum City: int
 
     case ABAKAN = 1;
     case KYZYL = 2;
-    case CHIKAGO = 3;
-    case UST_ABAKAN = 4;
 
     public function label(): string
     {
         return match ($this) {
             self::ABAKAN => 'Абакан',
             self::KYZYL => 'Кызыл',
-            self::CHIKAGO => 'Черногорск',
-            self::UST_ABAKAN => 'Усть-Абакан',
         };
     }
 
@@ -30,35 +26,32 @@ enum City: int
         return match ($this) {
             self::ABAKAN => 'abakan',
             self::KYZYL => 'kyzyl',
-            self::CHIKAGO => 'chernogorsk',
-            self::UST_ABAKAN => 'ust-abakan',
         };
     }
 
     /**
+     * Альтернативные названия, которые мапятся на этот город.
+     *
      * @return string[]
      */
     public function aliases(): array
     {
         return match ($this) {
+            self::ABAKAN => ['Черногорск', 'Усть-Абакан'],
             self::KYZYL => ['Кызылский кожуун'],
-            default => [],
         };
     }
 
     /**
-     * Города офферов, которые принимает группа с этим city.
+     * Города групп, в которые можно публиковать оффер с этим городом.
+     * Абаканские офферы — во все группы; кызыльские — только в кызыльские.
      *
      * @return self[]
      */
-    public function acceptedCities(): array
+    public function acceptedGroupCities(): array
     {
         return match ($this) {
-            self::ABAKAN, self::CHIKAGO, self::UST_ABAKAN => [
-                self::ABAKAN,
-                self::CHIKAGO,
-                self::UST_ABAKAN,
-            ],
+            self::ABAKAN => self::cases(),
             self::KYZYL => [self::KYZYL],
         };
     }

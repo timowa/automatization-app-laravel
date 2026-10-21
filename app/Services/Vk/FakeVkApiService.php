@@ -24,6 +24,8 @@ class FakeVkApiService extends VkApiService
 
     public array $storiesPostResponse = ['count' => 1];
 
+    public bool $wallPostExistsResult = true;
+
     public bool $noRepostRights = false;
 
     public array $friendsResponse = [];
@@ -105,6 +107,13 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('storiesPost');
 
         return $this->storiesPostResponse;
+    }
+
+    public function wallPostExists(string $fullId): bool
+    {
+        $this->calls[] = ['method' => 'wallPostExists', 'post_id' => $fullId];
+
+        return $this->wallPostExistsResult;
     }
 
     public function createReposts(int $userId, string $postId, array $groupIds): array

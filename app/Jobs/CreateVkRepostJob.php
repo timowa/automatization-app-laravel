@@ -72,12 +72,10 @@ class CreateVkRepostJob implements ShouldQueue
                 return;
             }
 
-            // Найти city групп, которые принимают город оффера
-            $acceptingCityValues = array_filter(
-                City::cases(),
-                fn (City $c) => in_array($offerCity, $c->acceptedCities(), true)
+            $acceptingCityValues = array_map(
+                fn (City $c) => $c->value,
+                $offerCity->acceptedGroupCities()
             );
-            $acceptingCityValues = array_map(fn (City $c) => $c->value, $acceptingCityValues);
 
             $groups = VkGroup::whereIn('city', $acceptingCityValues)->get();
             if ($groups->isEmpty()) {

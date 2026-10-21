@@ -15,7 +15,7 @@
                 <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
                     <div class="flex gap-6">
                         <a href="/agents" class="font-bold text-lg">Агенты</a>
-                        <a href="/posts" class="font-bold text-lg">Посты</a>
+                        <a href="/offers" class="font-bold text-lg">Офферы</a>
                         <a href="/misc" class="font-bold text-lg">Прочее</a>
                     </div>
                     <div class="flex items-center gap-4">

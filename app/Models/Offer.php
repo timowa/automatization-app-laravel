@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use App\Enums\Category;
 use App\Enums\City;
 use App\Enums\Deal;
-use App\Enums\Category;
 use App\Enums\OfferStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -22,6 +22,7 @@ class Offer extends Model
     public $timestamps = true;
 
     const CREATED_AT = 'created_at';
+
     const UPDATED_AT = null;
 
     protected $fillable = [
@@ -44,10 +45,13 @@ class Offer extends Model
         'floors_total',
         'commission',
         'deposit',
+        'skip_reason',
+        'payload',
     ];
 
     protected $casts = [
         'location' => 'array',
+        'payload' => 'array',
         'area' => 'float',
         'kitchen_area' => 'float',
         'living_area' => 'float',
@@ -63,22 +67,30 @@ class Offer extends Model
 
     public function city(): ?City
     {
-        return City::tryFrom((int) $this->getAttribute('city'));
+        $value = $this->getAttribute('city');
+
+        return $value === null ? null : City::tryFrom((int) $value);
     }
 
     public function deal(): ?Deal
     {
-        return Deal::tryFrom((int) $this->getAttribute('deal'));
+        $value = $this->getAttribute('deal');
+
+        return $value === null ? null : Deal::tryFrom((int) $value);
     }
 
     public function category(): ?Category
     {
-        return Category::tryFrom((int) $this->getAttribute('category'));
+        $value = $this->getAttribute('category');
+
+        return $value === null ? null : Category::tryFrom((int) $value);
     }
 
-    public function status(): OfferStatus
+    public function status(): ?OfferStatus
     {
-        return OfferStatus::tryFrom((int) $this->getAttribute('status'));
+        $value = $this->getAttribute('status');
+
+        return $value === null ? null : OfferStatus::tryFrom((int) $value);
     }
 
     public function agent(): BelongsTo
@@ -103,8 +115,7 @@ class Offer extends Model
 
     public function getPrice(): int
     {
-        $price = (int) $this->price;
-        return $price;
+        return (int) $this->price;
     }
 
     public function getBasePrice(): int
@@ -115,6 +126,7 @@ class Offer extends Model
     public function getAddressFromLocation(): string
     {
         $location = $this->location ?? [];
+
         return sprintf('%s, %s', $location['city'] ?? '', $location['address'] ?? '');
     }
 }

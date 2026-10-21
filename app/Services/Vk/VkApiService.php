@@ -207,7 +207,7 @@ class VkApiService
             'upload_results' => is_array($upload) ? ($upload['upload_result'] ?? null) : null,
         ]);
 
-        if (($saved['count'] ?? 0) < 1) {
+        if (! self::isStorySaveSuccessful($saved)) {
             $uploadSafe = $this->redactSecrets(is_array($upload) ? $upload : ['response' => $upload]);
 
             throw new VkStoryNotSavedException(
@@ -217,6 +217,50 @@ class VkApiService
         }
 
         return $saved;
+    }
+
+    /**
+     * VK иногда отдаёт items без count — если items не пустой, история уже создана.
+     *
+     * @param  array<string, mixed>  $saved
+     */
+    public static function isStorySaveSuccessful(array $saved): bool
+    {
+        if ((int) ($saved['count'] ?? 0) >= 1) {
+            return true;
+        }
+
+        $items = $saved['items'] ?? null;
+
+        return is_array($items) && $items !== [];
+    }
+
+    /**
+     * Пост существует во ВКонтакте и не помечен удалённым.
+     */
+    public function wallPostExists(string $fullId): bool
+    {
+        $response = $this->client->wall()->getById($this->token, [
+            'posts' => $fullId,
+        ]);
+
+        $posts = [];
+        if (isset($response['items']) && is_array($response['items'])) {
+            $posts = $response['items'];
+        } elseif (is_array($response) && array_is_list($response)) {
+            $posts = $response;
+        }
+
+        if ($posts === []) {
+            return false;
+        }
+
+        $post = $posts[0] ?? null;
+        if (! is_array($post) || ! isset($post['id'])) {
+            return false;
+        }
+
+        return ($post['is_deleted'] ?? false) !== true;
     }
 
     private function redactSecrets(mixed $value): mixed

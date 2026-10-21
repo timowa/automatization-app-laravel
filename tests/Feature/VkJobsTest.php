@@ -100,14 +100,14 @@ class VkJobsTest extends TestCase
             ->create();
     }
 
-    public function test_city_accepted_cities_mapping(): void
+    public function test_city_aliases_and_accepted_group_cities(): void
     {
-        $abakanRegion = [City::ABAKAN, City::CHIKAGO, City::UST_ABAKAN];
+        $this->assertSame(City::ABAKAN, City::tryFromLabel('Черногорск'));
+        $this->assertSame(City::ABAKAN, City::tryFromLabel('Усть-Абакан'));
+        $this->assertSame(City::KYZYL, City::tryFromLabel('Кызылский кожуун'));
 
-        $this->assertSame($abakanRegion, City::ABAKAN->acceptedCities());
-        $this->assertSame($abakanRegion, City::CHIKAGO->acceptedCities());
-        $this->assertSame($abakanRegion, City::UST_ABAKAN->acceptedCities());
-        $this->assertSame([City::KYZYL], City::KYZYL->acceptedCities());
+        $this->assertSame([City::ABAKAN, City::KYZYL], City::ABAKAN->acceptedGroupCities());
+        $this->assertSame([City::KYZYL], City::KYZYL->acceptedGroupCities());
     }
 
     public function test_create_vk_post_job_success(): void
@@ -236,10 +236,11 @@ class VkJobsTest extends TestCase
         $this->assertSame([$kyzylGroup->group_id], $repostCalls[0]['args'] ?? null);
     }
 
-    public function test_create_vk_repost_job_abakan_group_accepts_chikago_offer(): void
+    public function test_create_vk_repost_job_abakan_offer_goes_to_all_groups(): void
     {
-        $abakanGroup = VkGroup::factory()->create(['city' => 1]);
-        $postTask = $this->createPostTaskForCity(3);
+        $abakanGroup = VkGroup::factory()->create(['city' => City::ABAKAN->value]);
+        $kyzylGroup = VkGroup::factory()->create(['city' => City::KYZYL->value]);
+        $postTask = $this->createPostTaskForCity(City::ABAKAN->value);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -258,35 +259,15 @@ class VkJobsTest extends TestCase
 
         $repostCalls = array_values(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createReposts'));
         $this->assertCount(1, $repostCalls);
-        $this->assertSame([$abakanGroup->group_id], $repostCalls[0]['args'] ?? null);
-    }
-
-    public function test_create_vk_repost_job_kyzyl_group_rejects_abakan_offer(): void
-    {
-        VkGroup::factory()->create(['city' => 2]);
-        $postTask = $this->createPostTaskForCity(1);
-        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
-        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
-
-        $repostTask = PublicationTask::factory()
-            ->for($postTask->publication)
-            ->ofType(PublicationTaskType::VK_REPOST)
-            ->dependsOn($postTask)
-            ->withStatus(PublicationTaskStatus::QUEUED)
-            ->create();
-
-        $job = new CreateVkRepostJob($repostTask->id);
-        $job->handle($this->vkApi, ...$this->jobDependencies());
-
-        $repostTask = $repostTask->fresh();
-        $this->assertSame(PublicationTaskStatus::SUCCESS, $repostTask->status);
-        $this->assertEmpty(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createReposts'));
+        $this->assertEqualsCanonicalizing(
+            [$abakanGroup->group_id, $kyzylGroup->group_id],
+            $repostCalls[0]['args'] ?? []
+        );
     }
 
     public function test_create_vk_repost_job_success_when_no_groups_for_city(): void
     {
-        VkGroup::factory()->create(['city' => 2]);
-        $postTask = $this->createPostTaskForCity(1);
+        $postTask = $this->createPostTaskForCity(City::KYZYL->value);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -427,6 +408,72 @@ class VkJobsTest extends TestCase
         $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
         $this->assertStringContainsString('count = 0', (string) $storyTask->error);
         $this->assertStringNotContainsString('secret-token', (string) $storyTask->error);
+    }
+
+    public function test_create_vk_stories_job_succeeds_when_items_present_without_count(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $postTask = $this->createPostTask();
+        OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $storyTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_STORY)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->storiesPostResponse = [
+            'items' => [['id' => 42]],
+        ];
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::SUCCESS, $storyTask->status);
+    }
+
+    public function test_create_vk_stories_job_fails_when_wall_post_deleted(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $postTask = $this->createPostTask();
+        OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        $storyTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_STORY)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->wallPostExistsResult = false;
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
+        $this->assertStringContainsString('удалён', (string) $storyTask->error);
+        $this->assertEmpty(array_filter($this->vkApi->calls, fn (array $call): bool => $call['method'] === 'storiesPost'));
     }
 
     public function test_container_resolves_comment_and_like_jobs(): void
@@ -840,10 +887,11 @@ class VkJobsTest extends TestCase
         $this->assertCount(1, $batchCalls);
     }
 
-    public function test_create_vk_product_job_abakan_group_accepts_chikago_offer(): void
+    public function test_create_vk_product_job_abakan_offer_goes_to_all_groups(): void
     {
-        $abakanGroup = VkGroup::factory()->create(['city' => 1]);
-        $postTask = $this->createPostTaskForCity(3);
+        $abakanGroup = VkGroup::factory()->create(['city' => City::ABAKAN->value]);
+        $kyzylGroup = VkGroup::factory()->create(['city' => City::KYZYL->value]);
+        $postTask = $this->createPostTaskForCity(City::ABAKAN->value);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 
@@ -859,40 +907,20 @@ class VkJobsTest extends TestCase
 
         $productTask = $productTask->fresh();
         $this->assertSame(PublicationTaskStatus::SUCCESS, $productTask->status);
-        $this->assertDatabaseCount('vk_products', 1);
+        $this->assertDatabaseCount('vk_products', 2);
         $this->assertDatabaseHas('vk_products', [
             'offer_id' => $postTask->publication->offer_id,
             'group_id' => $abakanGroup->group_id,
         ]);
-    }
-
-    public function test_create_vk_product_job_kyzyl_group_rejects_abakan_offer(): void
-    {
-        VkGroup::factory()->create(['city' => 2]);
-        $postTask = $this->createPostTaskForCity(1);
-        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
-        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
-
-        $productTask = PublicationTask::factory()
-            ->for($postTask->publication)
-            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
-            ->dependsOn($postTask)
-            ->withStatus(PublicationTaskStatus::QUEUED)
-            ->create();
-
-        $job = new CreateVkProductJob($productTask->id);
-        $job->handle($this->vkApi, ...$this->jobDependencies());
-
-        $productTask = $productTask->fresh();
-        $this->assertSame(PublicationTaskStatus::SUCCESS, $productTask->status);
-        $this->assertDatabaseCount('vk_products', 0);
-        $this->assertEmpty(array_filter($this->vkApi->calls, fn ($call) => $call['method'] === 'createProductsBatch'));
+        $this->assertDatabaseHas('vk_products', [
+            'offer_id' => $postTask->publication->offer_id,
+            'group_id' => $kyzylGroup->group_id,
+        ]);
     }
 
     public function test_create_vk_product_job_success_when_no_groups_for_city(): void
     {
-        VkGroup::factory()->create(['city' => 2]);
-        $postTask = $this->createPostTaskForCity(1);
+        $postTask = $this->createPostTaskForCity(City::KYZYL->value);
         $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
         $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
 

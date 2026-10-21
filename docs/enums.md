@@ -114,15 +114,12 @@
 
 Тип: `int`. Трейт: `EnumHasLabel`.
 
-| Case | Value | Label | Alias |
-|---|---|---|---|
-| `ABAKAN` | 1 | Абакан | abakan |
-| `KYZYL` | 2 | Кызыл | kyzyl |
-| `CHIKAGO` | 3 | Черногорск | chernogorsk |
-| `UST_ABAKAN` | 4 | Усть-Абакан | ust-abakan |
+| Case | Value | Label | Alias (slug) | Aliases (парсинг) |
+|---|---|---|---|---|
+| `ABAKAN` | 1 | Абакан | abakan | Черногорск, Усть-Абакан |
+| `KYZYL` | 2 | Кызыл | kyzyl | Кызылский кожуун |
 
-> Case `CHIKAGO` соответствует городу Черногорск (alias `chernogorsk`).
-> `acceptedCities()` связывает Абакан, Черногорск и Усть-Абакан в одну группу для репостов/market.
+> `acceptedGroupCities()`: абаканские офферы публикуются во все группы; кызыльские — только в кызыльские.
 
 ## VK-перечисления
 

@@ -236,3 +236,21 @@ if (!function_exists('appLogger')) {
         return Log::channel($channel);
     }
 }
+
+if (!function_exists('formatUiDate')) {
+    /**
+     * Единый формат дат в пользовательском интерфейсе: dd-mm-YYYY.
+     */
+    function formatUiDate(mixed $date): string
+    {
+        if ($date === null || $date === '') {
+            return '—';
+        }
+
+        try {
+            return \Illuminate\Support\Carbon::parse($date)->format('d-m-Y');
+        } catch (\Throwable) {
+            return '—';
+        }
+    }
+}

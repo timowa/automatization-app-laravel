@@ -78,6 +78,16 @@ class PublishLoopStoriesCommand extends Command
 
                 $vkApi->setToken($vkUser->getToken());
 
+                if (! $vkApi->wallPostExists($post->getFullId())) {
+                    Log::channel('job')->warning('Пост для loop-истории удалён или не найден во ВКонтакте', [
+                        'offer_id' => $offer->id,
+                        'post_id' => $post->id,
+                    ]);
+                    $loopStory->update(['is_active' => false]);
+
+                    continue;
+                }
+
                 $context = (new VkStoriesContextFactory)->getContext((int) $post->id);
                 $template = $this->resolveTemplate($context);
                 $image = (new VkStoriesGenerator)->generate($context, $template);
@@ -85,7 +95,7 @@ class PublishLoopStoriesCommand extends Command
                 try {
                     $res = $this->postStoryWithRetry($vkApi, $post->getFullId(), $image);
 
-                    if (($res['count'] ?? 0) < 1) {
+                    if (! VkApiService::isStorySaveSuccessful($res)) {
                         throw new VkStoryNotSavedException(
                             'ВКонтакте не сохранил историю (count = 0). Ответ загрузки: '
                             .json_encode($res, JSON_UNESCAPED_UNICODE)

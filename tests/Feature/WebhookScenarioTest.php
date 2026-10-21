@@ -280,7 +280,7 @@ class WebhookScenarioTest extends TestCase
         $this->assertNotSame(ScenarioType::SALE->value, $publication->scenario->value);
     }
 
-    public function test_house_alias_and_ust_abakan_city_are_parsed(): void
+    public function test_house_alias_and_ust_abakan_city_are_parsed_as_abakan(): void
     {
         Agent::factory()->create(['phone' => '79953742476']);
 
@@ -299,7 +299,7 @@ class WebhookScenarioTest extends TestCase
         $offer = Offer::first();
         $this->assertNotNull($offer);
         $this->assertSame(Category::HOUSE, $offer->category());
-        $this->assertSame(City::UST_ABAKAN, $offer->city());
+        $this->assertSame(City::ABAKAN, $offer->city());
     }
 
     public function test_land_category_is_parsed(): void
@@ -317,7 +317,7 @@ class WebhookScenarioTest extends TestCase
         $this->assertSame(Category::LAND, $offer->category());
     }
 
-    public function test_unknown_category_skips_offer_without_sql_error(): void
+    public function test_unknown_category_saves_offer_without_tasks(): void
     {
         Agent::factory()->create(['phone' => '79953742476']);
 
@@ -326,7 +326,11 @@ class WebhookScenarioTest extends TestCase
         ]));
 
         $response->assertOk();
-        $this->assertDatabaseCount('offers', 0);
+        $this->assertDatabaseCount('offers', 1);
+        $offer = Offer::first();
+        $this->assertNotNull($offer);
+        $this->assertSame('Неизвестная категория: неизвестная-категория', $offer->skip_reason);
+        $this->assertDatabaseCount('publications', 0);
     }
 
     public function test_price_decrease_triggers_price_changed_scenario(): void
@@ -421,7 +425,7 @@ class WebhookScenarioTest extends TestCase
         $this->assertSame(ScenarioType::FEEDBACK->value, $secondPublication->scenario->value);
     }
 
-    public function test_duplicate_offer_is_skipped(): void
+    public function test_duplicate_offer_is_saved_without_tasks(): void
     {
         $agent = Agent::factory()->create(['phone' => '79953742476']);
         Offer::factory()->create([
@@ -435,15 +439,24 @@ class WebhookScenarioTest extends TestCase
         $response = $this->postJson('/offer', $this->payload());
 
         $response->assertOk();
-        $this->assertDatabaseCount('offers', 1);
+        $this->assertDatabaseCount('offers', 2);
+        $duplicate = Offer::query()->latest('id')->first();
+        $this->assertNotNull($duplicate);
+        $this->assertSame('Дубликат существующего оффера', $duplicate->skip_reason);
+        $this->assertDatabaseCount('publications', 0);
     }
 
-    public function test_unknown_agent_logs_warning_and_returns_ok(): void
+    public function test_unknown_agent_saves_offer_without_tasks(): void
     {
         $response = $this->postJson('/offer', $this->payload());
 
         $response->assertOk();
-        $this->assertDatabaseCount('offers', 0);
+        $this->assertDatabaseCount('offers', 1);
+        $offer = Offer::first();
+        $this->assertNotNull($offer);
+        $this->assertSame('Не найден агент по номеру телефона', $offer->skip_reason);
+        $this->assertNull($offer->agent_id);
+        $this->assertDatabaseCount('publications', 0);
     }
 
     public function test_media_id_copied_from_previous_offer_with_same_url_and_agent(): void

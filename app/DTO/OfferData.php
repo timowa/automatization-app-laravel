@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\DTO;
 
 use App\Enums\Category;
@@ -10,19 +12,19 @@ use App\Enums\OfferStatus;
 final readonly class OfferData
 {
     public function __construct(
-        public int $offerId,
+        public ?int $offerId,
         public string $code,
-        public int $stage,
-        public OfferStatus $status,
+        public ?int $stage,
+        public ?OfferStatus $status,
         public ?City $city,
-        public int $agentId,
-        public int $price,
+        public ?int $agentId,
+        public ?int $price,
         public ?int $commission,
         public ?int $deposit,
-        public float $area,
+        public ?float $area,
         public ?float $kitchenArea,
         public ?float $livingArea,
-        public int $rooms,
+        public ?int $rooms,
         public ?int $roomsOffered,
         public ?int $floor,
         public ?int $floors,
@@ -30,9 +32,9 @@ final readonly class OfferData
         public ?Deal $deal,
         public ?Category $category,
         public ?array $location,
-    )
-    {
-
+        public ?string $skipReason = null,
+        public ?array $payload = null,
+    ) {
     }
 
     public function getArray(): array
@@ -41,21 +43,24 @@ final readonly class OfferData
             'offer_id' => $this->offerId,
             'code' => $this->code,
             'stage' => $this->stage,
-            'status' => $this->status,
-            'city' => $this->city,
+            'status' => $this->status?->value,
+            'city' => $this->city?->value,
             'agent_id' => $this->agentId,
             'price' => $this->price,
             'commission' => $this->commission,
             'deposit' => $this->deposit,
             'area' => $this->area,
+            'kitchen_area' => $this->kitchenArea,
+            'living_area' => $this->livingArea,
             'rooms' => $this->rooms,
             'rooms_offered' => $this->roomsOffered,
             'floor' => $this->floor,
             'floors_total' => $this->floors,
-            'deal' => $this->deal,
-            'category' => $this->category,
+            'deal' => $this->deal?->value,
+            'category' => $this->category?->value,
             'location' => $this->location,
-
+            'skip_reason' => $this->skipReason,
+            'payload' => $this->payload,
         ];
     }
 }
