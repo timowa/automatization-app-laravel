@@ -30,7 +30,6 @@ class OfferAdminController extends Controller
         'scenario' => 'publications.scenario',
         'id' => 'offers.id',
         'offer_id' => 'offers.offer_id',
-        'stage' => 'offers.stage',
         'status' => 'offers.status',
         'price' => 'offers.price',
         'area' => 'offers.area',

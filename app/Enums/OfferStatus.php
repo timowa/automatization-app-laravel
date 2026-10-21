@@ -26,4 +26,19 @@ enum OfferStatus: int
             self::DELETED => 'удалено',
         };
     }
+
+    /**
+     * Цвет фона бейджа статуса (белый текст).
+     */
+    public function badgeColor(): string
+    {
+        return match ($this) {
+            self::ACTIVE => '#059669',
+            self::BOOKED => '#d97706',
+            self::ARCHIVE => '#64748b',
+            self::REMOVED => '#dc2626',
+            self::DELAYED => '#2563eb',
+            self::DELETED => '#4b5563',
+        };
+    }
 }

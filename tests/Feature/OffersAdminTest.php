@@ -51,6 +51,10 @@ class OffersAdminTest extends TestCase
         $response->assertSee('111-001');
         $response->assertDontSee('222-002');
         $response->assertSee('Офферы');
+        $response->assertSee('Сбросить столбцы', false);
+        $response->assertDontSee('>Этап<', false);
+        $response->assertSee('offer-status-badge', false);
+        $response->assertSee(OfferStatus::ACTIVE->badgeColor(), false);
     }
 
     public function test_offers_page_sorts_by_code_and_column_order(): void

@@ -3,31 +3,181 @@
 @section('title', 'Офферы')
 
 @push('styles')
-<style>
-    .offer-status-icon,
-    .offer-status-loader,
-    .task-status-icon {
-        cursor: pointer;
-        position: relative;
-        display: inline-flex;
-    }
-    .offer-instant-tooltip {
-        position: absolute;
-        z-index: 50;
-        left: 0;
-        top: calc(100% + 6px);
-        max-width: 22rem;
-        padding: 0.4rem 0.55rem;
-        border-radius: 0.375rem;
-        background: #111827;
-        color: #fff;
-        font-size: 0.75rem;
-        line-height: 1.25rem;
-        white-space: normal;
-        box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
-        pointer-events: none;
-    }
-</style>
+    <link rel="stylesheet" href="https://cdn.datatables.net/2.2.2/css/dataTables.dataTables.min.css">
+    <link rel="stylesheet" href="https://cdn.datatables.net/buttons/3.2.2/css/buttons.dataTables.min.css">
+    <style>
+        .offer-status-icon,
+        .offer-status-loader,
+        .task-status-icon {
+            cursor: pointer;
+            position: relative;
+            display: inline-flex;
+        }
+        .offer-instant-tooltip {
+            position: absolute;
+            z-index: 50;
+            left: 0;
+            top: calc(100% + 6px);
+            max-width: 22rem;
+            padding: 0.4rem 0.55rem;
+            border-radius: 0.375rem;
+            background: #111827;
+            color: #fff;
+            font-size: 0.75rem;
+            line-height: 1.25rem;
+            white-space: normal;
+            box-shadow: 0 4px 12px rgb(0 0 0 / 0.18);
+            pointer-events: none;
+        }
+
+        .offers-table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .offers-table-toolbar .dt-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            float: none;
+        }
+
+        .offers-table-scroll {
+            overflow-x: auto;
+            overflow-y: visible;
+            scrollbar-width: thin;
+            scrollbar-color: #6b7280 #f3f4f6;
+        }
+
+        .offers-table-scroll::-webkit-scrollbar {
+            height: 10px;
+        }
+
+        .offers-table-scroll::-webkit-scrollbar-thumb {
+            background: #6b7280;
+            border-radius: 999px;
+        }
+
+        #offers-table {
+            width: 100% !important;
+            border-collapse: collapse;
+        }
+
+        #offers-table thead th {
+            background-color: #f9fafb;
+            white-space: nowrap;
+            user-select: none;
+        }
+
+        #offers-table.display tbody tr:hover {
+            background-color: #f9fafb;
+        }
+
+        #offers-table th.col-price,
+        #offers-table td.col-price {
+            min-width: 7.5rem;
+            white-space: nowrap;
+        }
+
+        .offer-status-badge {
+            display: inline-block;
+            padding: 0.15rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.75rem;
+            font-weight: 600;
+            line-height: 1.25rem;
+            color: #fff;
+            white-space: nowrap;
+        }
+
+        div.dt-container {
+            font-size: 0.875rem;
+        }
+
+        .offers-table-toolbar .dt-button {
+            margin: 0 !important;
+            padding: 0.5rem 0.9rem !important;
+            border-radius: 0.375rem !important;
+            font-size: 0.875rem !important;
+            font-weight: 600 !important;
+            line-height: 1.25rem !important;
+            box-shadow: none !important;
+            cursor: pointer;
+        }
+
+        .offers-table-toolbar .dt-button.offers-btn-columns {
+            background: #2563eb !important;
+            border: 1px solid #1d4ed8 !important;
+            color: #fff !important;
+        }
+
+        .offers-table-toolbar .dt-button.offers-btn-columns:hover,
+        .offers-table-toolbar .dt-button.offers-btn-columns:focus {
+            background: #1d4ed8 !important;
+            border-color: #1e40af !important;
+            color: #fff !important;
+        }
+
+        .offers-table-toolbar .dt-button.offers-btn-columns.active {
+            background: #1e40af !important;
+        }
+
+        .offers-table-toolbar .dt-button.offers-btn-reset-columns {
+            background: #f8fafc !important;
+            border: 1px solid #94a3b8 !important;
+            color: #0f172a !important;
+        }
+
+        .offers-table-toolbar .dt-button.offers-btn-reset-columns:hover,
+        .offers-table-toolbar .dt-button.offers-btn-reset-columns:focus {
+            background: #e2e8f0 !important;
+            border-color: #64748b !important;
+            color: #0f172a !important;
+        }
+
+        div.dt-button-collection {
+            background: #fff;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+            padding: 0.5rem;
+            max-height: 70vh;
+            overflow-y: auto;
+            min-width: 12rem;
+        }
+
+        div.dt-button-collection .dt-button {
+            display: block;
+            width: 100%;
+            text-align: left;
+            margin: 0 0 0.15rem !important;
+            border: 0 !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            border-radius: 0.375rem !important;
+            padding: 0.45rem 0.6rem !important;
+            color: #1f2937 !important;
+            font-weight: 500 !important;
+        }
+
+        div.dt-button-collection .dt-button:hover {
+            background: #eff6ff !important;
+            color: #1d4ed8 !important;
+        }
+
+        div.dt-button-collection .dt-button.dt-button-active {
+            background: #dbeafe !important;
+            color: #1e40af !important;
+        }
+
+        table.dataTable tbody tr.offer-tasks-child > td {
+            background: #f9fafb;
+            padding: 0.75rem 1rem;
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -101,33 +251,34 @@
         };
     @endphp
 
-    <div class="bg-white rounded shadow overflow-x-auto">
-        <table class="min-w-full text-sm" id="offers-table">
-            <thead class="bg-gray-50">
+    <div class="offers-table-toolbar" id="offers-table-toolbar"></div>
+
+    <div class="bg-white rounded shadow offers-table-scroll" id="offers-table-scroll">
+        <table class="min-w-full text-sm display nowrap" id="offers-table">
+            <thead>
                 <tr>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('health', 'Статус') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('code', 'Код') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('agent', 'Агент') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('scenario', 'Сценарий') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('id', 'ID') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('offer_id', 'Внешний ID') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('stage', 'Этап') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('status', 'Статус объекта') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('price', 'Цена') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('area', 'Площадь') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('kitchen_area', 'Кухня') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('living_area', 'Жилая') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('city', 'Город') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('address', 'Адрес') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('deal', 'Сделка') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('category', 'Категория') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('rooms', 'Комнаты') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('rooms_offered', 'Комнат сдаётся') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('floor', 'Этаж') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('floors_total', 'Этажей') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('commission', 'Комиссия') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('deposit', 'Залог') !!}</th>
-                    <th class="px-3 py-2 text-left whitespace-nowrap">{!! $sortLink('created_at', 'Создан') !!}</th>
+                    <th class="px-3 py-2 text-left no-colvis" data-col="health">{!! $sortLink('health', 'Статус') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="code">{!! $sortLink('code', 'Код') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="agent">{!! $sortLink('agent', 'Агент') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="scenario">{!! $sortLink('scenario', 'Сценарий') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="id">{!! $sortLink('id', 'ID') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="offer_id">{!! $sortLink('offer_id', 'Внешний ID') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="status">{!! $sortLink('status', 'Статус объекта') !!}</th>
+                    <th class="px-3 py-2 text-left col-price" data-col="price">{!! $sortLink('price', 'Цена') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="area">{!! $sortLink('area', 'Площадь') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="kitchen_area">{!! $sortLink('kitchen_area', 'Кухня') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="living_area">{!! $sortLink('living_area', 'Жилая') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="city">{!! $sortLink('city', 'Город') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="address">{!! $sortLink('address', 'Адрес') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="deal">{!! $sortLink('deal', 'Сделка') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="category">{!! $sortLink('category', 'Категория') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="rooms">{!! $sortLink('rooms', 'Комнаты') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="rooms_offered">{!! $sortLink('rooms_offered', 'Комнат сдаётся') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="floor">{!! $sortLink('floor', 'Этаж') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="floors_total">{!! $sortLink('floors_total', 'Этажей') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="commission">{!! $sortLink('commission', 'Комиссия') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="deposit">{!! $sortLink('deposit', 'Залог') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="created_at">{!! $sortLink('created_at', 'Создан') !!}</th>
                 </tr>
             </thead>
             <tbody class="divide-y">
@@ -137,6 +288,7 @@
                         $offer = $row['offer'];
                         $health = $row['health'];
                         $scenario = $row['scenario'];
+                        $offerStatus = $offer->status();
                     @endphp
                     <tr class="offer-row align-top" data-offer-id="{{ $offer->id }}">
                         <td class="px-3 py-2">
@@ -182,9 +334,14 @@
                         <td class="px-3 py-2">{{ $scenario !== '' ? $scenario : '—' }}</td>
                         <td class="px-3 py-2">{{ $offer->id }}</td>
                         <td class="px-3 py-2">{{ $offer->offer_id ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $offer->stage ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $offer->status()?->label() ?? '—' }}</td>
-                        <td class="px-3 py-2">{{ $offer->price !== null ? number_format((int) $offer->price, 0, '.', ' ') : '—' }}</td>
+                        <td class="px-3 py-2">
+                            @if ($offerStatus)
+                                <span class="offer-status-badge" style="background-color: {{ $offerStatus->badgeColor() }}">{{ $offerStatus->label() }}</span>
+                            @else
+                                —
+                            @endif
+                        </td>
+                        <td class="px-3 py-2 col-price">{{ $offer->price !== null ? number_format((int) $offer->price, 0, '.', ' ') : '—' }}</td>
                         <td class="px-3 py-2">{{ $offer->area ?? '—' }}</td>
                         <td class="px-3 py-2">{{ $offer->kitchen_area ?? '—' }}</td>
                         <td class="px-3 py-2">{{ $offer->living_area ?? '—' }}</td>
@@ -200,11 +357,6 @@
                         <td class="px-3 py-2">{{ $offer->deposit ?? '—' }}</td>
                         <td class="px-3 py-2 whitespace-nowrap">{{ formatUiDate($offer->created_at) }}</td>
                     </tr>
-                    <tr class="offer-tasks-row hidden bg-gray-50" data-offer-id="{{ $offer->id }}">
-                        <td colspan="23" class="px-4 py-3">
-                            <div class="offer-tasks-content text-sm text-gray-500">Загрузка…</div>
-                        </td>
-                    </tr>
                 @endforeach
             </tbody>
         </table>
@@ -216,6 +368,10 @@
 @endsection
 
 @push('scripts')
+<script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+<script src="https://cdn.datatables.net/2.2.2/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/3.2.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/3.2.2/js/buttons.colVis.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const csrf = document.querySelector('meta[name="csrf-token"]')?.content
@@ -227,6 +383,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     const pollTimers = {};
+    let dataTable = null;
 
     const hideInstantTooltip = (icon) => {
         icon.querySelector('.offer-instant-tooltip')?.remove();
@@ -297,10 +454,19 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
     };
 
+    const findOfferRow = (offerId) => document.querySelector(`tr.offer-row[data-offer-id="${offerId}"]`);
+
+    const getTasksContentEl = (offerId) => {
+        const offerTr = findOfferRow(offerId);
+        if (!offerTr) return null;
+        const childRow = offerTr.nextElementSibling;
+        if (!childRow || !childRow.classList.contains('offer-tasks-child')) return null;
+        return childRow.querySelector('.offer-tasks-content');
+    };
+
     const applyTasks = (offerId, tasks) => {
-        const tasksRow = document.querySelector(`.offer-tasks-row[data-offer-id="${offerId}"]`);
-        if (!tasksRow || tasksRow.classList.contains('hidden')) return;
-        const content = tasksRow.querySelector('.offer-tasks-content');
+        const content = getTasksContentEl(offerId);
+        if (!content) return;
         content.innerHTML = renderTasksHtml(tasks);
         content.querySelectorAll('.task-status-icon').forEach(bindInstantTooltip);
     };
@@ -386,9 +552,8 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     const loadTasks = async (offerId) => {
-        const tasksRow = document.querySelector(`.offer-tasks-row[data-offer-id="${offerId}"]`);
-        if (!tasksRow) return;
-        const content = tasksRow.querySelector('.offer-tasks-content');
+        const content = getTasksContentEl(offerId);
+        if (!content) return;
         content.innerHTML = 'Загрузка…';
         try {
             const response = await fetch(`/offers/${offerId}/tasks`, {
@@ -402,18 +567,36 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     };
 
+    const closeAllTaskChildren = (exceptOfferId = null) => {
+        document.querySelectorAll('tr.offer-row').forEach((tr) => {
+            const id = tr.dataset.offerId;
+            if (exceptOfferId !== null && id === exceptOfferId) return;
+            if (!dataTable) return;
+            const row = dataTable.row(tr);
+            if (row.child.isShown()) {
+                row.child.hide();
+            }
+        });
+    };
+
+    const toggleTasks = async (offerId) => {
+        const offerTr = findOfferRow(offerId);
+        if (!offerTr || !dataTable) return;
+
+        const row = dataTable.row(offerTr);
+        if (row.child.isShown()) {
+            row.child.hide();
+            return;
+        }
+
+        closeAllTaskChildren(offerId);
+        row.child('<div class="offer-tasks-content text-sm text-gray-500">Загрузка…</div>', 'offer-tasks-child').show();
+        await loadTasks(offerId);
+    };
+
     document.querySelectorAll('.offer-toggle-tasks').forEach((btn) => {
         btn.addEventListener('click', async () => {
-            const offerId = btn.dataset.offerId;
-            const tasksRow = document.querySelector(`.offer-tasks-row[data-offer-id="${offerId}"]`);
-            if (!tasksRow) return;
-
-            const isHidden = tasksRow.classList.contains('hidden');
-            document.querySelectorAll('.offer-tasks-row').forEach((row) => row.classList.add('hidden'));
-            if (!isHidden) return;
-
-            tasksRow.classList.remove('hidden');
-            await loadTasks(offerId);
+            await toggleTasks(btn.dataset.offerId);
         });
     });
 
@@ -463,6 +646,148 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelectorAll('.offer-status[data-status="processing"]').forEach((statusBox) => {
         pollOfferStatus(statusBox.dataset.offerId);
+    });
+
+    // --- Column visibility (DataTables), как у агентов ---
+    const tableEl = document.getElementById('offers-table');
+    if (!tableEl) return;
+
+    if (typeof jQuery === 'undefined' || typeof DataTable === 'undefined') {
+        console.error('Offers table: jQuery/DataTables failed to load', {
+            jQuery: typeof jQuery,
+            DataTable: typeof DataTable,
+        });
+        return;
+    }
+
+    const stateKey = 'dt:offers-list:v1';
+
+    function columnKeys(dt) {
+        return dt.columns().header().toArray().map(function (th, index) {
+            return th.getAttribute('data-col') || ('col-' + index);
+        });
+    }
+
+    function loadColumnVisibility() {
+        try {
+            const raw = window.localStorage.getItem(stateKey);
+            if (!raw) {
+                return null;
+            }
+            const parsed = JSON.parse(raw);
+            return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function saveColumnVisibility(dt) {
+        const keys = columnKeys(dt);
+        const visibility = {};
+        for (let index = 0; index < keys.length; index++) {
+            const key = keys[index];
+            if (!key || key === 'health') {
+                continue;
+            }
+            visibility[key] = dt.column(index).visible();
+        }
+        window.localStorage.setItem(stateKey, JSON.stringify(visibility));
+    }
+
+    let suppressColumnSave = false;
+
+    function applyColumnVisibility(dt, savedVisibility) {
+        if (!savedVisibility) {
+            return;
+        }
+        const keys = columnKeys(dt);
+        let changed = false;
+        suppressColumnSave = true;
+        try {
+            for (let index = 0; index < keys.length; index++) {
+                const key = keys[index];
+                if (!key || key === 'health' || typeof savedVisibility[key] !== 'boolean') {
+                    continue;
+                }
+                if (dt.column(index).visible() !== savedVisibility[key]) {
+                    dt.column(index).visible(savedVisibility[key], false);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                dt.columns.adjust().draw(false);
+            }
+        } finally {
+            suppressColumnSave = false;
+        }
+    }
+
+    try {
+        const savedVisibility = loadColumnVisibility();
+
+        dataTable = new DataTable(tableEl, {
+            paging: false,
+            info: false,
+            searching: false,
+            ordering: false,
+            autoWidth: false,
+            layout: {
+                topStart: null,
+                topEnd: {
+                    buttons: [
+                        {
+                            extend: 'colvis',
+                            text: '☰ Столбцы',
+                            className: 'offers-btn-columns',
+                            columns: ':not(.no-colvis)',
+                        },
+                        {
+                            text: 'Сбросить столбцы',
+                            className: 'offers-btn-reset-columns',
+                            action: function (e, dt) {
+                                window.localStorage.removeItem(stateKey);
+                                dt.columns().visible(true, false);
+                                dt.columns.adjust().draw(false);
+                            },
+                        },
+                    ],
+                },
+                bottomStart: null,
+                bottomEnd: null,
+            },
+            language: {
+                emptyTable: 'Нет офферов',
+                zeroRecords: 'Нет офферов',
+                buttons: {
+                    colvis: 'Столбцы',
+                    colvisRestore: 'Показать все',
+                },
+            },
+            columnDefs: [
+                {
+                    targets: 0,
+                    className: 'no-colvis',
+                },
+            ],
+            stateSave: false,
+        });
+
+        applyColumnVisibility(dataTable, savedVisibility);
+    } catch (error) {
+        console.error('Offers table: DataTables init failed', error);
+        return;
+    }
+
+    const toolbar = document.getElementById('offers-table-toolbar');
+    const buttonsContainer = tableEl.closest('.dt-container')?.querySelector('.dt-buttons');
+    if (toolbar && buttonsContainer) {
+        toolbar.appendChild(buttonsContainer);
+    }
+
+    dataTable.on('column-visibility.dt', function () {
+        if (!suppressColumnSave) {
+            saveColumnVisibility(dataTable);
+        }
     });
 });
 </script>
