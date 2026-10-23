@@ -190,8 +190,15 @@ function fail(id, message) {
   write({ jsonrpc: '2.0', id, error: { code: -32603, message: hideSecrets(message) } });
 }
 
+let framing = null;
+
 function write(payload) {
   const json = Buffer.from(JSON.stringify(payload));
+  if (framing === 'line') {
+    process.stdout.write(json);
+    process.stdout.write('\n');
+    return;
+  }
   process.stdout.write(`Content-Length: ${json.length}\r\n\r\n`);
   process.stdout.write(json);
 }
@@ -251,8 +258,41 @@ if (process.argv.includes('--self-test')) {
   process.stdout.write('ok\n');
 } else {
   let buffer = Buffer.alloc(0);
+
+  function dispatch(body) {
+    handle(JSON.parse(body)).catch((error) => {
+      process.stderr.write(`${hideSecrets(error.stack ?? error.message)}\n`);
+    });
+  }
+
   process.stdin.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
+    if (framing === null) {
+      const start = buffer.toString('utf8').trimStart();
+      if (start.startsWith('{')) {
+        framing = 'line';
+      } else if (/content-length:/i.test(start)) {
+        framing = 'headers';
+      } else {
+        return;
+      }
+    }
+
+    if (framing === 'line') {
+      let text = buffer.toString('utf8');
+      let nl = text.indexOf('\n');
+      while (nl !== -1) {
+        const line = text.slice(0, nl).trim();
+        text = text.slice(nl + 1);
+        if (line !== '') {
+          dispatch(line);
+        }
+        nl = text.indexOf('\n');
+      }
+      buffer = Buffer.from(text);
+      return;
+    }
+
     for (;;) {
       const headerEnd = buffer.indexOf('\r\n\r\n');
       if (headerEnd === -1) {
@@ -266,9 +306,7 @@ if (process.argv.includes('--self-test')) {
       }
       const body = buffer.subarray(start, start + length).toString('utf8');
       buffer = buffer.subarray(start + length);
-      handle(JSON.parse(body)).catch((error) => {
-        process.stderr.write(`${hideSecrets(error.stack ?? error.message)}\n`);
-      });
+      dispatch(body);
     }
   });
 }
