@@ -184,9 +184,6 @@ export function summarizeLog(text) {
     first ??= at;
     last = at;
     counts[level] += 1;
-    if (level === 'INFO') {
-      continue;
-    }
 
     const brace = rest.indexOf(' {');
     const message = (brace === -1 ? rest : rest.slice(0, brace)).trim();
@@ -203,9 +200,15 @@ export function summarizeLog(text) {
     }
   }
 
-  const errors = [...groups.values()].sort((a, b) => b.count - a.count);
+  const sorted = [...groups.values()].sort((a, b) => b.count - a.count);
 
-  return { first, last, counts, errors };
+  return {
+    first,
+    last,
+    counts,
+    errors: sorted.filter((group) => group.level !== 'INFO'),
+    info: sorted.filter((group) => group.level === 'INFO').slice(0, 40),
+  };
 }
 
 const KIND_CHANNEL = {
@@ -225,13 +228,19 @@ export function buildReport(date, channels) {
   const order = ['job', 'vk', 'vk-images', 'vk-sync', 'vkRepost', 'stats', 'check_tokens', 'llm'];
   const files = {};
   const missing = [];
+  const downloadErrors = [];
   const listed = {};
 
   for (const name of order) {
     const channel = channels[name];
     if (channel === undefined || channel.present === false) {
-      missing.push(name);
-      files[name] = { present: false, ...(channel?.error ? { error: channel.error } : {}) };
+      if (channel?.error && channel.missing === false) {
+        downloadErrors.push({ channel: name, error: channel.error });
+        files[name] = { present: false, failed: true, error: channel.error };
+      } else {
+        missing.push(name);
+        files[name] = { present: false };
+      }
       continue;
     }
     files[name] = {
@@ -291,38 +300,54 @@ export function buildReport(date, channels) {
     }
   }
 
-  const problems = [...buckets.values()]
-    .sort((a, b) => (b.jobs.reduce((sum, job) => sum + job.count, 0) - a.jobs.reduce((sum, job) => sum + job.count, 0)))
-    .map((bucket) => ({
-      role: bucket.role,
-      job_count: bucket.jobs.reduce((sum, job) => sum + job.count, 0),
-      job: bucket.jobs.map((job) => ({ message: job.message, count: job.count, samples: job.samples })),
-      extended_channel: bucket.matched.length > 0 ? pool[bucket.matched[0]].channel : (KIND_CHANNEL[bucket.kind] ?? null),
-      extended: bucket.matched.map((index) => ({
-        channel: pool[index].channel,
-        level: pool[index].level,
-        message: pool[index].message,
-        count: pool[index].count,
-        samples: pool[index].samples,
-      })),
-    }));
+  const jobInfo = channels.job?.present ? channels.job.info : [];
 
-  const unmatched = pool
-    .filter((_, index) => !consumed.has(index))
-    .map((item) => ({
+  function infoFor(kind) {
+    return jobInfo
+      .filter((group) => jobKind(group.message) === kind)
+      .map((group) => ({ message: group.message, count: group.count, samples: group.samples }));
+  }
+
+  function withSuccess(item, infoGroups) {
+    const ids = sampleIds(item.samples);
+    const sameDaySuccess = infoGroups.some((group) => idsOverlap(ids, sampleIds(group.samples)));
+
+    return {
       channel: item.channel,
       level: item.level,
       message: item.message,
       count: item.count,
       samples: item.samples,
-    }));
+      same_day_success: sameDaySuccess,
+    };
+  }
+
+  const problems = [...buckets.values()]
+    .sort((a, b) => (b.jobs.reduce((sum, job) => sum + job.count, 0) - a.jobs.reduce((sum, job) => sum + job.count, 0)))
+    .map((bucket) => {
+      const info = infoFor(bucket.kind);
+
+      return {
+        role: bucket.role,
+        job_count: bucket.jobs.reduce((sum, job) => sum + job.count, 0),
+        job: bucket.jobs.map((job) => ({ message: job.message, count: job.count, samples: job.samples })),
+        extended_channel: bucket.matched.length > 0 ? pool[bucket.matched[0]].channel : (KIND_CHANNEL[bucket.kind] ?? null),
+        extended: bucket.matched.map((index) => withSuccess(pool[index], info)),
+        info,
+      };
+    });
+
+  const unmatched = pool
+    .filter((_, index) => !consumed.has(index))
+    .map((item) => withSuccess(item, infoFor(item.kind)));
 
   return {
     date,
     timezone: 'Europe/Moscow',
-    note: 'problems — предупреждения job уже с текстом исключения из парного vk-*. role access и expected в промпт кода не входят. missing_files — единственный список отсутствующих файлов. present true не означает, что файла нет. Группы INFO не передаются.',
+    note: 'problems — предупреждение job, текст исключения из vk-* и успешные INFO того же действия в info. same_day_success истинно, если идентификатор из ошибки есть в успешной строке за эти сутки. missing_files — файла нет. download_errors — скачивание сорвалось, файл на сервере может быть. role access и expected в промпт кода не входят.',
     files,
     missing_files: missing,
+    download_errors: downloadErrors,
     problems,
     unmatched_extended: unmatched,
     channels: listed,
@@ -342,7 +367,12 @@ async function summarizeDay(date) {
     const path = pattern.replace('{date}', date);
     const file = await curl(path);
     if (!file.ok) {
-      channels[name] = { present: false, path, ...(file.missing ? {} : { error: hideSecrets(file.error) }) };
+      channels[name] = {
+        present: false,
+        path,
+        missing: file.missing,
+        ...(file.missing ? {} : { error: hideSecrets(file.error) }),
+      };
       return;
     }
     channels[name] = { present: true, path, ...summarizeLog(file.body) };
@@ -354,7 +384,7 @@ async function summarizeDay(date) {
 const TOOLS = [
   {
     name: 'summarize_prod_logs',
-    description: 'Сводка продакшен-логов за сутки по Москве. problems содержит предупреждение job и текст исключения из парного канала vk, vk-images, vk-sync или vkRepost. missing_files — файлы, которых нет. Сырой журнал повторно не запрашивать.',
+    description: 'Сводка продакшен-логов за сутки по Москве. problems связывает предупреждение job, текст исключения vk-* и успешные INFO того же действия. missing_files — файлов нет. download_errors — скачивание сорвалось. Сырой журнал повторно не запрашивать.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -432,7 +462,8 @@ if (process.argv.includes('--self-test')) {
     '[2026-10-22 00:05:00] production.WARNING: Ошибка автоприветствия на заявку в друзья {"agent_id":11,"user_id":1}',
     '[2026-10-22 00:06:00] production.WARNING: Ошибка автоприветствия на заявку в друзья {"agent_id":11,"user_id":1}',
     '[2026-10-22 00:07:00] production.WARNING: Ошибка переопубликации loop-истории {"loop_story_id":5}',
-    '[2026-10-22 00:08:00] production.INFO: Пост по офферу опубликован {"offer":"1"}',
+    '[2026-10-22 00:08:00] production.INFO: Автоприветствие на заявку в друзья отправлено {"agent_id":11,"user_id":1}',
+    '[2026-10-22 00:09:00] production.INFO: Пост по офферу опубликован {"offer":"1"}',
   ].join('\n'));
   const vk = summarizeLog([
     '[2026-10-22 00:05:00] production.ERROR: Permission to perform this action is denied {"agent_id":11,"user_id":1,"context":"friend_request_welcome"}',
@@ -443,17 +474,25 @@ if (process.argv.includes('--self-test')) {
   const report = buildReport('2026-10-22', {
     job: { present: true, path: 'job-2026-10-22.log', ...job },
     vk: { present: true, path: 'vk/posts/error-2026-10-22.log', ...vk },
-    'vk-images': { present: false, path: 'vk/images/error-2026-10-22.log' },
+    'vk-images': { present: false, path: 'vk/images/error-2026-10-22.log', missing: true },
+    'vk-sync': { present: false, path: 'vk/sync/error-2026-10-22.log', missing: false, error: 'curl 28' },
   });
   const welcome = report.problems.find((item) => item.job[0].message.includes('автоприветствия'));
   const story = report.problems.find((item) => item.job[0].message.includes('loop-истории'));
-  const ok = job.counts.INFO === 1
+  const permission = welcome?.extended.find((item) => item.message.includes('Permission'));
+  const privacy = welcome?.extended.find((item) => item.message.includes('privacy settings'));
+  const ok = job.counts.INFO === 2
     && job.counts.WARNING === 3
     && job.errors.length === 2
     && welcome?.extended.length === 2
+    && welcome.info.length === 1
+    && permission?.same_day_success === true
+    && privacy?.same_day_success === false
     && welcome.extended_channel === 'vk'
     && story?.extended[0].message.includes('error_message')
     && report.missing_files.includes('vk-images')
+    && !report.missing_files.includes('vk-sync')
+    && report.download_errors.some((item) => item.channel === 'vk-sync')
     && report.channels.vk.groups.length === 3
     && !JSON.stringify(report).includes('Загрузка изображения');
   if (!ok) {
