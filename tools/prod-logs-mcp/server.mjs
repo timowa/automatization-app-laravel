@@ -60,7 +60,9 @@ function curlOnce(ftpPath) {
     const child = spawn('curl', [
       '--config', '-',
       '--noproxy', '*',
+      '--ipv4',
       '--disable-epsv',
+      '--disable-eprt',
       '--ftp-pasv',
       '--silent',
       '--show-error',
@@ -96,12 +98,12 @@ function sleep(ms) {
 
 async function curl(ftpPath) {
   let last;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
     last = await curlOnce(ftpPath);
     if (last.ok || last.missing) {
       return last;
     }
-    const pause = /425/.test(last.error ?? '') ? 2000 * (attempt + 1) : 500 * (attempt + 1);
+    const pause = /425/.test(last.error ?? '') ? 3000 * (attempt + 1) : 500 * (attempt + 1);
     await sleep(pause);
   }
 
