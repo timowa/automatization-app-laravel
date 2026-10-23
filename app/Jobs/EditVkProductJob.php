@@ -7,6 +7,7 @@ namespace App\Jobs;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
+use App\Jobs\Concerns\MarksPublicationTaskFailedOnJobFailure;
 use App\Models\Offer;
 use App\Models\PublicationTask;
 use App\Models\VkProduct;
@@ -26,6 +27,7 @@ class EditVkProductJob implements ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
+    use MarksPublicationTaskFailedOnJobFailure;
     use Queueable;
     use SerializesModels;
 

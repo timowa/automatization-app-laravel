@@ -15,5 +15,5 @@ echo "Worker starting: $(date)" >> "$LOG"
 exec "$PHP" artisan queue:work database \
     --sleep=3 \
     --tries=3 \
-    --timeout=90 \
+    --timeout=180 \
     >> "$LOG" 2>&1

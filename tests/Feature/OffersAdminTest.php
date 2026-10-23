@@ -57,6 +57,42 @@ class OffersAdminTest extends TestCase
         $response->assertSee(OfferStatus::ACTIVE->badgeColor(), false);
     }
 
+    public function test_offers_page_defaults_to_active_status_and_created_at_desc(): void
+    {
+        Offer::factory()->create([
+            'code' => 'old-001',
+            'status' => OfferStatus::ACTIVE->value,
+            'created_at' => now()->subDay(),
+        ]);
+        Offer::factory()->create([
+            'code' => 'new-001',
+            'status' => OfferStatus::ACTIVE->value,
+            'created_at' => now(),
+        ]);
+        Offer::factory()->create([
+            'code' => 'booked-001',
+            'status' => OfferStatus::BOOKED->value,
+            'created_at' => now()->addHour(),
+        ]);
+
+        $default = $this->withSession(['is_admin' => true])->get('/offers');
+        $default->assertOk();
+        $default->assertSee('new-001');
+        $default->assertSee('old-001');
+        $default->assertDontSee('booked-001');
+        $default->assertSeeInOrder(['new-001', 'old-001']);
+        $default->assertSee(
+            'value="'.OfferStatus::ACTIVE->value.'" selected',
+            false,
+        );
+        $default->assertSee('Создан ↓', false);
+
+        $allStatuses = $this->withSession(['is_admin' => true])->get('/offers?status=');
+        $allStatuses->assertOk();
+        $allStatuses->assertSee('booked-001');
+        $allStatuses->assertSee('new-001');
+    }
+
     public function test_offers_page_sorts_by_code_and_column_order(): void
     {
         $agentA = Agent::factory()->create(['name' => 'Агент А']);

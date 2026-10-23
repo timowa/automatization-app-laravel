@@ -50,13 +50,18 @@ class OfferAdminController extends Controller
 
     public function index(Request $request, OfferHealthStatusResolver $healthResolver): View
     {
-        $sort = (string) $request->input('sort', 'id');
+        $sort = (string) $request->input('sort', 'created_at');
         $dir = strtolower((string) $request->input('dir', 'desc')) === 'asc' ? 'asc' : 'desc';
 
         if (! array_key_exists($sort, self::SORTABLE)) {
-            $sort = 'id';
+            $sort = 'created_at';
             $dir = 'desc';
         }
+
+        // Без параметра status — по умолчанию «актив»; пустой status (Все) — без фильтра.
+        $statusFilter = $request->has('status')
+            ? $request->input('status')
+            : (string) OfferStatus::ACTIVE->value;
 
         $query = Offer::query()
             ->select('offers.*')
@@ -76,8 +81,8 @@ class OfferAdminController extends Controller
             $query->where('offers.deal', (int) $request->input('deal'));
         }
 
-        if ($request->filled('status')) {
-            $query->where('offers.status', (int) $request->input('status'));
+        if ($statusFilter !== null && $statusFilter !== '') {
+            $query->where('offers.status', (int) $statusFilter);
         }
 
         if ($request->filled('code')) {
@@ -107,7 +112,7 @@ class OfferAdminController extends Controller
             'agent_id' => $request->input('agent_id'),
             'city' => $request->input('city'),
             'deal' => $request->input('deal'),
-            'status' => $request->input('status'),
+            'status' => $statusFilter,
             'code' => $request->input('code'),
         ];
 

@@ -22,6 +22,8 @@ class VkStoriesGenerator
 
     private const FONT_BOLD_PATH = __DIR__.'/../../../../storage/app/assets/fonts/ProximaNovaSemibold.ttf';
 
+    private const IMAGE_DOWNLOAD_TIMEOUT_SECONDS = 15;
+
     public function generate(VkStoriesContext $context, VkStoriesTemplateInterface $template): string
     {
         $imagePath = null;
@@ -32,8 +34,6 @@ class VkStoriesGenerator
                 throw new StoryPublicationSkippedException('У объекта нет фото, публикация истории пропущена');
             }
 
-            $imageInfo = $this->readImageInfo($url);
-
             if (! file_exists(self::BANNER_TEMPLATE)) {
                 throw new RuntimeException('Файл шаблона не найден по пути: '.self::BANNER_TEMPLATE);
             }
@@ -42,24 +42,7 @@ class VkStoriesGenerator
                 throw new RuntimeException('Файл шрифта не найден по пути: '.self::FONT_PATH);
             }
 
-            $extension = match ($imageInfo[2]) {
-                IMAGETYPE_JPEG => 'jpg',
-                IMAGETYPE_PNG => 'png',
-                IMAGETYPE_WEBP => 'webp',
-                IMAGETYPE_GIF => 'gif',
-                IMAGETYPE_AVIF => 'avif',
-                default => throw new RuntimeException('Unsupported image type'),
-            };
-
-            $imagePath = sprintf(
-                storage_path('app/tmp/image_%s.%s'),
-                uniqid(),
-                $extension
-            );
-
-            if (! @copy($url, $imagePath)) {
-                throw new StoryPublicationSkippedException('Ссылка на фото недоступна, публикация истории пропущена');
-            }
+            $imagePath = $this->downloadImageToTemp($url);
 
             $imagePath = (new ImageWatermarker)->apply($imagePath);
 
@@ -122,10 +105,7 @@ class VkStoriesGenerator
         }
     }
 
-    /**
-     * @return array{0: int, 1: int, 2: int, 3: string, mime: string, channels?: int, bits?: int}
-     */
-    private function readImageInfo(string $url): array
+    private function downloadImageToTemp(string $url): string
     {
         $warning = null;
         set_error_handler(static function (int $severity, string $message) use (&$warning): bool {
@@ -135,12 +115,12 @@ class VkStoriesGenerator
         });
 
         try {
-            $imageInfo = getimagesize($url);
+            $contents = file_get_contents($url, false, $this->imageStreamContext());
         } finally {
             restore_error_handler();
         }
 
-        if (! is_array($imageInfo) || ! isset($imageInfo[2])) {
+        if (! is_string($contents) || $contents === '') {
             $message = is_string($warning) && str_contains($warning, '404')
                 ? 'Ссылка на фото недоступна (404), публикация истории пропущена'
                 : 'Ссылка на фото недоступна, публикация истории пропущена';
@@ -148,7 +128,48 @@ class VkStoriesGenerator
             throw new StoryPublicationSkippedException($message);
         }
 
-        return $imageInfo;
+        $imageInfo = @getimagesizefromstring($contents);
+        if (! is_array($imageInfo) || ! isset($imageInfo[2])) {
+            throw new StoryPublicationSkippedException('Ссылка на фото недоступна, публикация истории пропущена');
+        }
+
+        $extension = match ($imageInfo[2]) {
+            IMAGETYPE_JPEG => 'jpg',
+            IMAGETYPE_PNG => 'png',
+            IMAGETYPE_WEBP => 'webp',
+            IMAGETYPE_GIF => 'gif',
+            IMAGETYPE_AVIF => 'avif',
+            default => throw new RuntimeException('Unsupported image type'),
+        };
+
+        $imagePath = sprintf(
+            storage_path('app/tmp/image_%s.%s'),
+            uniqid(),
+            $extension
+        );
+
+        if (file_put_contents($imagePath, $contents) === false) {
+            throw new RuntimeException('Не удалось сохранить временный файл изображения истории');
+        }
+
+        return $imagePath;
+    }
+
+    /**
+     * @return resource
+     */
+    private function imageStreamContext()
+    {
+        return stream_context_create([
+            'http' => [
+                'timeout' => self::IMAGE_DOWNLOAD_TIMEOUT_SECONDS,
+                'follow_location' => 1,
+            ],
+            'https' => [
+                'timeout' => self::IMAGE_DOWNLOAD_TIMEOUT_SECONDS,
+                'follow_location' => 1,
+            ],
+        ]);
     }
 
     private function isUnavailableImageError(Throwable $e): bool
@@ -156,7 +177,8 @@ class VkStoriesGenerator
         $message = $e->getMessage();
 
         return str_contains($message, '404')
-            || str_contains($message, 'failed to open stream');
+            || str_contains($message, 'failed to open stream')
+            || str_contains($message, 'timed out');
     }
 
     private function deleteTemporaryImage(mixed $imagePath): void

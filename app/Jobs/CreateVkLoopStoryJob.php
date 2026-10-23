@@ -11,6 +11,7 @@ use App\Exceptions\StoryPublicationSkippedException;
 use App\Exceptions\VkStoryNotSavedException;
 use App\Helpers\PublicationTaskDependencyResolver;
 use App\Interfaces\VkStoriesTemplateInterface;
+use App\Jobs\Concerns\MarksPublicationTaskFailedOnJobFailure;
 use App\Models\PublicationTask;
 use App\Models\VkLoopStory;
 use App\Models\VkUser;
@@ -34,10 +35,13 @@ class CreateVkLoopStoryJob implements ShouldQueue
 {
     use Dispatchable;
     use InteractsWithQueue;
+    use MarksPublicationTaskFailedOnJobFailure;
     use Queueable;
     use SerializesModels;
 
     public int $tries = 1;
+
+    public int $timeout = 180;
 
     public function __construct(
         private readonly int $taskId
