@@ -43,7 +43,15 @@ function hideSecrets(text) {
   return safe;
 }
 
-function curl(ftpPath) {
+function isMissingFile(code, stderr) {
+  if (code === 78) {
+    return true;
+  }
+
+  return /no such file|does not exist/i.test(stderr) && /550|\(78\)/i.test(stderr);
+}
+
+function curlOnce(ftpPath) {
   const url = `ftp://${HOST}/${ftpPath}`;
 
   return new Promise((resolve, reject) => {
@@ -64,13 +72,35 @@ function curl(ftpPath) {
     child.on('close', (code) => {
       const stderr = hideSecrets(Buffer.concat(err).toString('utf8')).trim();
       if (code !== 0) {
-        const missing = /550|78|9\b|denied you to change|No such file/i.test(stderr);
-        resolve({ ok: false, missing, error: stderr || `curl ${code}` });
+        resolve({
+          ok: false,
+          missing: isMissingFile(code, stderr),
+          error: stderr || `curl ${code}`,
+        });
         return;
       }
       resolve({ ok: true, body: Buffer.concat(out).toString('utf8') });
     });
   });
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+async function curl(ftpPath) {
+  let last;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    last = await curlOnce(ftpPath);
+    if (last.ok || last.missing) {
+      return last;
+    }
+    await sleep(500 * (attempt + 1));
+  }
+
+  return last;
 }
 
 const ID_KEYS = ['task_id', 'loop_story_id', 'agent_id', 'user_id', 'friend_user_id', 'offer_id', 'context', 'error_code'];
@@ -363,7 +393,7 @@ async function summarizeDay(date) {
   }
 
   const channels = {};
-  await Promise.all(CHANNELS.map(async ([name, pattern]) => {
+  for (const [name, pattern] of CHANNELS) {
     const path = pattern.replace('{date}', date);
     const file = await curl(path);
     if (!file.ok) {
@@ -373,10 +403,10 @@ async function summarizeDay(date) {
         missing: file.missing,
         ...(file.missing ? {} : { error: hideSecrets(file.error) }),
       };
-      return;
+      continue;
     }
     channels[name] = { present: true, path, ...summarizeLog(file.body) };
-  }));
+  }
 
   return buildReport(date, channels);
 }
