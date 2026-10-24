@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Helpers\FriendRequestWelcomeText;
+use App\Helpers\VkApiErrorInspector;
 use App\Models\AgentVkFriend;
 use App\Models\AgentVkFriendRequest;
 use App\Services\StandardTextRenderer;
@@ -159,6 +160,29 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
                 'message_id' => $messageId,
             ]);
         } catch (\Throwable $e) {
+            if (VkApiErrorInspector::isPermanentDirectMessageRefusal($e)) {
+                DB::table('agent_vk_friend_requests')
+                    ->where('id', $request->id)
+                    ->whereNull('message_id')
+                    ->update([
+                        'welcome_permanently_failed' => true,
+                        'updated_at' => now(),
+                    ]);
+
+                Log::channel('job')->warning('Автоприветствие не отправлено: постоянный отказ ВКонтакте', [
+                    'agent_id' => $agent->id,
+                    'user_id' => $request->user_id,
+                ]);
+                Log::channel('vk')->error($e->getMessage(), [
+                    'agent_id' => $agent->id,
+                    'user_id' => $request->user_id,
+                    'context' => 'friend_request_welcome',
+                    'permanent' => true,
+                ]);
+
+                return;
+            }
+
             Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
                 'agent_id' => $agent->id,
                 'user_id' => $request->user_id,

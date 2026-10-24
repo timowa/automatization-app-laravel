@@ -303,4 +303,91 @@ class FriendRequestWelcomeTest extends TestCase
         Storage::disk('public')->assertMissing('agent-cards/agent_'.$agent->id.'_card.png');
         Storage::disk('public')->assertMissing('agent-cards/agent_'.$agent->id.'_card_thumb.png');
     }
+
+    public function test_permanent_privacy_refusal_is_skipped_by_next_welcome_command(): void
+    {
+        $agent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+
+        $blocked = AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 600741496,
+            'first_name' => 'Закрытый',
+            'is_closed' => false,
+            'payload' => ['user_id' => 600741496],
+        ]);
+        $next = AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 600741497,
+            'first_name' => 'Следующий',
+            'is_closed' => false,
+            'payload' => ['user_id' => 600741497],
+        ]);
+
+        $fake = new FakeVkApiService;
+        $fake->setFailNext('RuntimeException', "Can't send messages to this user due to their privacy settings");
+
+        (new ProcessFriendRequestWelcomeJob($blocked->id))->handle($fake);
+
+        $blocked->refresh();
+        $this->assertNull($blocked->message_id);
+        $this->assertTrue($blocked->welcome_permanently_failed);
+
+        Queue::fake();
+        $this->artisan('vk:process-friend-request-welcome')->assertSuccessful();
+
+        Queue::assertPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use ($next): bool {
+            return $job->friendRequestId === $next->id;
+        });
+        Queue::assertNotPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use ($blocked): bool {
+            return $job->friendRequestId === $blocked->id;
+        });
+    }
+
+    public function test_temporary_welcome_failure_stays_in_queue(): void
+    {
+        $agent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+        $request = AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 42,
+            'first_name' => 'Временный',
+            'is_closed' => false,
+            'payload' => ['user_id' => 42],
+        ]);
+
+        $fake = new FakeVkApiService;
+        $fake->setFailNext('RuntimeException', 'Operation timed out after 15000 milliseconds');
+
+        (new ProcessFriendRequestWelcomeJob($request->id))->handle($fake);
+
+        $request->refresh();
+        $this->assertNull($request->message_id);
+        $this->assertFalse($request->welcome_permanently_failed);
+
+        Queue::fake();
+        $this->artisan('vk:process-friend-request-welcome')->assertSuccessful();
+
+        Queue::assertPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use ($request): bool {
+            return $job->friendRequestId === $request->id;
+        });
+    }
 }

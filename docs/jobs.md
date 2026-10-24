@@ -91,7 +91,7 @@
 2. Создаёт `VkStoriesContext` через `VkStoriesContextFactory`.
 3. Резолвит шаблон истории по типу сделки (SaleStoriesTemplate / RentStoriesTemplate).
 4. Генерирует баннер через `VkStoriesGenerator::generate()` → путь к файлу.
-5. Вызывает `vkApi->storiesPost(postFullId, imagePath)`.
+5. Публикует через `VkStoryPoster` (`storiesPost`, до 3 попыток на код 1 и HTTP 405).
 6. Проверяет `count >= 1` в ответе.
 7. Удаляет временный файл баннера.
 
@@ -104,7 +104,9 @@
 Поток аналогичен `CreateVkStoriesJob`, но дополнительно:
 - Создаёт/обновляет запись `VkLoopStory` (`offer_id`, `task_id`, `is_active = true`, `last_published_at = now()`).
 
-Переопубликация выполняется консольной командой `vk:publish-loop-stories` (см. `docs/console-commands.md`).
+Публикация истории идёт через `VkStoryPoster`: код 1 (пустой `error_msg`, который SDK иначе превращает в `TypeError`) и HTTP 405 повторяются до 3 раз с паузой. После этого задача `failed` с понятной причиной. Ответ ВКонтакте до разбора SDK нормализует `VkApiResponseGuard` и пишет код в канал `vk` без токена.
+
+Переопубликация выполняется консольной командой `vk:publish-loop-stories` (см. `docs/console-commands.md`). Мёртвая ссылка на фото останавливает цикл (`is_active = false`), а не сдвигает `last_published_at`.
 
 ### EndVkLoopStoryJob
 
@@ -138,11 +140,11 @@
 Поток:
 1. Загружает все группы из `VkGroup::all()`.
 2. Создаёт `VkPostContext` для формирования названия, описания, цены.
-3. Для каждой группы:
-   - Вызывает `vkApi->createProduct(groupId, name, description, price, categoryId, images)`.
-   - Создаёт запись `VkProduct` (`offer_id`, `agent_id`, `group_id`, `product_id`, `task_id`).
-   - `usleep(350_000)` — ограничение rate limit (≈3 запроса/сек).
-   - При ошибке в отдельной группе — логирует и продолжает со следующей.
+3. Для каждой группы, где товара ещё нет:
+   - `uploadMarketPhoto`. Если главного фото нет, `market.add` не вызывается.
+   - Иначе `createProductsBatch` и запись `VkProduct` (`offer_id`, `agent_id`, `group_id`, `product_id`, `task_id`).
+   - Flood control откладывает всю задачу (`DefersVkFloodControlledTask`), не помечает её успехом.
+   - Ошибка или отсутствие фото хотя бы в одной группе: задача `failed`, уже созданные товары сохраняются, повтор пропускает их. Успех и снятие зависимости — только когда неудачных групп не осталось.
 
 Название: `"{category}, {address}"`. Описание: `"Подробности по телефону: {phone}\nАгент: {name}"`.
 

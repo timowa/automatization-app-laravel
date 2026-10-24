@@ -65,6 +65,8 @@ class AgentVkFriend extends Model
         'friend_list_names',
         'site',
         'last_birthday_wish_at',
+        'birthday_wish_denied_at',
+        'birthday_wish_denied_token_hash',
     ];
 
     protected $casts = [
@@ -92,6 +94,7 @@ class AgentVkFriend extends Model
         'schools' => 'array',
         'career' => 'array',
         'last_birthday_wish_at' => 'date',
+        'birthday_wish_denied_at' => 'date',
     ];
 
     public function agent(): BelongsTo

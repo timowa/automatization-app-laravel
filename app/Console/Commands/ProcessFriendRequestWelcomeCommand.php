@@ -21,6 +21,7 @@ class ProcessFriendRequestWelcomeCommand extends Command
         $requestId = DB::transaction(function (): ?int {
             $row = AgentVkFriendRequest::query()
                 ->whereNull('message_id')
+                ->where('welcome_permanently_failed', false)
                 ->orderBy('id')
                 ->lockForUpdate()
                 ->first();

@@ -34,6 +34,8 @@
 - Вызывает `stories.save`.
 - Возвращает результат (содержит `count`).
 
+HTTP-клиент SDK собирается с `http_errors = false` и `VkApiResponseGuard`: ответ не 200 и ошибка без строкового `error_msg` пишутся в канал `vk` (код и тело без токена). Пустой `error_msg` заменяется на пустую строку, чтобы SDK вернул `VKApiUnknownException` с кодом 1, а не `TypeError`. Повторы кода 1 и HTTP 405 делает `VkStoryPoster`, не этот метод.
+
 #### createReposts(int $userId, string $postId, array $groupIds): array
 
 Пакетный репост в группы через VKScript `execute()`.
@@ -47,13 +49,15 @@
 
 Создаёт комментарий к посту через `wall.createComment`.
 
-#### createProduct(int $groupId, string $name, string $description, int $price, int $categoryId, array $imagePaths): array
+#### uploadMarketPhoto(int $groupId, array $imagePaths): array
 
-Создаёт товар в группе (market).
+Загружает до 5 фото товара. Битый файл пропускается. Если в ответе сохранения нет `response`, метод возвращает пустой список и не читает отсутствующий ключ. Flood control пробрасывается вызывающему.
 
-- Загружает изображения (до 5): `photos.getMarketUploadServer` → `upload` → `photos.saveMarketPhoto`.
-- Вызывает `market.add` с `owner_id = -groupId`.
-- Возвращает результат (содержит `market_item_id`).
+#### createProductsBatch(int $groupId, string $name, string $description, int $price, int $categoryId, array $photoIds): array
+
+Создаёт товар в группе (`market.add`, `owner_id = -groupId`).
+
+Без числового главного фото (`photoIds[0]`) метод бросает `RuntimeException` «Нет главного фото товара» и не вызывает `market.add`.
 
 #### editProduct(int $groupId, int $productId, string $name, string $description, int $price, int $categoryId): array
 

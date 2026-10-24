@@ -40,6 +40,15 @@ class FakeVkApiService extends VkApiService
 
     public int $uploadMessagesPhotoId = 1001;
 
+    /**
+     * Если задано, uploadMarketPhoto возвращает эти наборы по порядку вызовов.
+     *
+     * @var list<list<int|string>>|null
+     */
+    public ?array $marketPhotoIdsSequence = null;
+
+    private int $marketPhotoSequenceIndex = 0;
+
     public function setFailNext(string $exceptionClass, string $message = 'VK API error', int $errorCode = 1, int $times = 1): void
     {
         $this->failNext = true;
@@ -226,6 +235,13 @@ class FakeVkApiService extends VkApiService
     {
         $this->calls[] = ['method' => 'uploadMarketPhoto', 'image_count' => count($imagePaths)];
         $this->maybeFail('uploadMarketPhoto');
+
+        if ($this->marketPhotoIdsSequence !== null) {
+            $ids = $this->marketPhotoIdsSequence[$this->marketPhotoSequenceIndex] ?? [];
+            $this->marketPhotoSequenceIndex++;
+
+            return $ids;
+        }
 
         return [fake()->unique()->numberBetween(1, 1_000_000)];
     }

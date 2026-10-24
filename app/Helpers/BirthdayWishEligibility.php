@@ -93,6 +93,39 @@ final class BirthdayWishEligibility
             : BirthdayWishGenderStatus::Default;
     }
 
+    public static function tokenHash(string $token): string
+    {
+        if ($token === '') {
+            return '';
+        }
+
+        return hash('sha256', $token);
+    }
+
+    /**
+     * Постоянный отказ в этом году для текущего доступа к странице.
+     * Другой токен или следующий год снова допускают попытку.
+     */
+    public static function isDeniedForCurrentToken(
+        mixed $deniedAt,
+        ?string $tokenHash,
+        string $currentTokenHash,
+        ?DateTimeInterface $on = null,
+    ): bool {
+        if ($deniedAt === null || $deniedAt === '' || $tokenHash === null || $tokenHash === '' || $currentTokenHash === '') {
+            return false;
+        }
+
+        if (strlen($tokenHash) !== strlen($currentTokenHash)) {
+            return false;
+        }
+
+        $year = Carbon::parse($on ?? now())->year;
+        $deniedYear = Carbon::parse($deniedAt)->year;
+
+        return $deniedYear === $year && hash_equals($tokenHash, $currentTokenHash);
+    }
+
     public static function wasWishedThisYear(mixed $lastBirthdayWishAt, ?DateTimeInterface $on = null): bool
     {
         if ($lastBirthdayWishAt === null || $lastBirthdayWishAt === '') {

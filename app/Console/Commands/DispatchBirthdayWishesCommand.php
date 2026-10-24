@@ -7,6 +7,7 @@ namespace App\Console\Commands;
 use App\Enums\Vk\Sex;
 use App\Helpers\BirthdayWishEligibility;
 use App\Jobs\WishHappyBirthdayJob;
+use App\Models\VkUser;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -50,13 +51,26 @@ class DispatchBirthdayWishesCommand extends Command
                 'agents_vk_friends.user_id',
                 'agents_vk_friends.bdate',
                 'agents_vk_friends.last_birthday_wish_at',
+                'agents_vk_friends.birthday_wish_denied_at',
+                'agents_vk_friends.birthday_wish_denied_token_hash',
             ])
             ->get();
 
+        $tokenHashes = $this->tokenHashes(
+            $birthdayFriends->pluck('agent_id')->map(fn ($id): int => (int) $id)->unique()->all()
+        );
+
         $eligible = $birthdayFriends
-            ->filter(function (object $friend): bool {
+            ->filter(function (object $friend) use ($tokenHashes): bool {
+                $hash = $tokenHashes[(int) $friend->agent_id] ?? '';
+
                 return BirthdayWishEligibility::ageInRange($friend->bdate)
-                    && ! BirthdayWishEligibility::wasWishedThisYear($friend->last_birthday_wish_at);
+                    && ! BirthdayWishEligibility::wasWishedThisYear($friend->last_birthday_wish_at)
+                    && ! BirthdayWishEligibility::isDeniedForCurrentToken(
+                        $friend->birthday_wish_denied_at,
+                        is_string($friend->birthday_wish_denied_token_hash) ? $friend->birthday_wish_denied_token_hash : null,
+                        $hash,
+                    );
             })
             ->values();
 
@@ -74,5 +88,27 @@ class DispatchBirthdayWishesCommand extends Command
         $this->info('Поздравлений запланировано: '.$eligible->count());
 
         return self::SUCCESS;
+    }
+
+    /**
+     * @param  list<int>  $agentIds
+     * @return array<int, string>
+     */
+    private function tokenHashes(array $agentIds): array
+    {
+        if ($agentIds === []) {
+            return [];
+        }
+
+        $hashes = [];
+        $users = VkUser::query()
+            ->whereIn('agent_id', $agentIds)
+            ->get(['agent_id', 'vk_token']);
+
+        foreach ($users as $user) {
+            $hashes[(int) $user->agent_id] = BirthdayWishEligibility::tokenHash($user->getToken());
+        }
+
+        return $hashes;
     }
 }

@@ -17,6 +17,7 @@ use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
 use App\Services\Vk\Stories\VkStoriesContext;
 use App\Services\Vk\Stories\VkStoriesContextFactory;
 use App\Services\Vk\Stories\VkStoriesGenerator;
+use App\Services\Vk\Stories\VkStoryPoster;
 use App\Services\Vk\VkApiService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -93,7 +94,7 @@ class PublishLoopStoriesCommand extends Command
                 $image = (new VkStoriesGenerator)->generate($context, $template);
 
                 try {
-                    $res = $this->postStoryWithRetry($vkApi, $post->getFullId(), $image);
+                    $res = (new VkStoryPoster)->post($vkApi, $post->getFullId(), $image);
 
                     if (! VkApiService::isStorySaveSuccessful($res)) {
                         throw new VkStoryNotSavedException(
@@ -117,7 +118,15 @@ class PublishLoopStoriesCommand extends Command
                     'post_id' => $post->id,
                 ]);
             } catch (\Throwable $e) {
-                if ($this->shouldPostponeLoopRetry($e)) {
+                if ($this->shouldStopLoop($e)) {
+                    $loopStory->update(['is_active' => false]);
+                    Log::channel('vk')->warning($e->getMessage(), [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                    Log::channel('job')->warning('Повторная публикация истории остановлена: ссылка на фото недоступна', [
+                        'loop_story_id' => $loopStory->id,
+                    ]);
+                } elseif ($this->shouldPostponeLoopRetry($e)) {
                     $loopStory->update(['last_published_at' => now()]);
                     Log::channel('vk')->warning($e->getMessage(), [
                         'loop_story_id' => $loopStory->id,
@@ -150,32 +159,21 @@ class PublishLoopStoriesCommand extends Command
         return self::SUCCESS;
     }
 
-    /**
-     * @return array<string, mixed>
-     */
-    private function postStoryWithRetry(VkApiService $vkApi, string $postId, string $image): array
+    private function shouldStopLoop(\Throwable $e): bool
     {
-        $last = null;
-
-        for ($attempt = 1; $attempt <= VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS; $attempt++) {
-            try {
-                return $vkApi->storiesPost($postId, $image);
-            } catch (\Throwable $e) {
-                $last = $e;
-                if (! VkApiErrorInspector::isTimeout($e) || $attempt === VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS) {
-                    throw $e;
-                }
-
-                usleep(350_000);
-            }
+        if (! $e instanceof StoryPublicationSkippedException) {
+            return false;
         }
 
-        throw $last ?? new \RuntimeException('Не удалось опубликовать историю');
+        $message = $e->getMessage();
+
+        return str_contains($message, 'недоступна')
+            || str_contains($message, '404');
     }
 
     private function shouldPostponeLoopRetry(\Throwable $e): bool
     {
-        if ($e instanceof VkStoryNotSavedException) {
+        if ($e instanceof VkStoryNotSavedException || $this->shouldStopLoop($e)) {
             return false;
         }
 

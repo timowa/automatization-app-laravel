@@ -953,7 +953,7 @@ class VkJobsTest extends TestCase
             ->withStatus(PublicationTaskStatus::QUEUED)
             ->create();
 
-        $this->vkApi->setFailNext('RuntimeException', 'Batch failed');
+        $this->vkApi->setFailNext('RuntimeException', 'Batch failed', 0, 2);
 
         $job = new CreateVkProductJob($productTask->id);
         $job->handle($this->vkApi, ...$this->jobDependencies());
@@ -1078,5 +1078,145 @@ class VkJobsTest extends TestCase
         $this->assertSame(PublicationTaskStatus::PROCESSING, $task->status);
         $this->assertNull($task->error);
         Queue::assertPushed(UploadVkImagesJob::class);
+    }
+
+    public function test_create_vk_stories_job_retries_empty_vk_error_then_fails(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $storyTask = $this->queuedStoryTask();
+        $this->vkApi->setFailNext('VKApiException', '', 1, 3);
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
+        $this->assertStringContainsString('код 1', (string) $storyTask->error);
+        $this->assertStringContainsString('Попытки исчерпаны', (string) $storyTask->error);
+        $calls = array_values(array_filter(
+            $this->vkApi->calls,
+            fn (array $call): bool => $call['method'] === 'storiesPost',
+        ));
+        $this->assertCount(3, $calls);
+    }
+
+    public function test_create_vk_stories_job_retries_http_405_then_fails(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $storyTask = $this->queuedStoryTask();
+        $this->vkApi->setFailNext('RuntimeException', 'Invalid http status: 405', 0, 3);
+
+        $job = new CreateVkStoriesJob($storyTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $storyTask = $storyTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $storyTask->status);
+        $this->assertStringContainsString('405', (string) $storyTask->error);
+        $this->assertStringContainsString('Попытки исчерпаны', (string) $storyTask->error);
+    }
+
+    public function test_create_vk_product_job_fails_without_main_photo(): void
+    {
+        VkGroup::factory()->count(2)->create();
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+        $productTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->marketPhotoIdsSequence = [[], []];
+
+        $job = new CreateVkProductJob($productTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $productTask = $productTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $productTask->status);
+        $this->assertStringContainsString('главного фото', (string) $productTask->error);
+        $this->assertStringContainsString('повторить', (string) $productTask->error);
+        $this->assertEmpty(array_filter($this->vkApi->calls, fn (array $call): bool => $call['method'] === 'createProductsBatch'));
+        $this->assertDatabaseCount('vk_products', 0);
+    }
+
+    public function test_create_vk_product_job_fails_when_only_some_groups_have_no_photo(): void
+    {
+        VkGroup::factory()->count(2)->create();
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+        $productTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->marketPhotoIdsSequence = [[501], []];
+
+        $job = new CreateVkProductJob($productTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $productTask = $productTask->fresh();
+        $this->assertSame(PublicationTaskStatus::FAILED, $productTask->status);
+        $this->assertDatabaseCount('vk_products', 1);
+        $batchCalls = array_values(array_filter(
+            $this->vkApi->calls,
+            fn (array $call): bool => $call['method'] === 'createProductsBatch',
+        ));
+        $this->assertCount(1, $batchCalls);
+    }
+
+    public function test_create_vk_product_job_defers_on_flood_control(): void
+    {
+        VkGroup::factory()->create();
+        $postTask = $this->createPostTask();
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+        $productTask = PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_CREATE_PRODUCT)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
+
+        $this->vkApi->setFailNext('VKApiException', 'Flood control', 9);
+
+        $job = new CreateVkProductJob($productTask->id);
+        $job->handle($this->vkApi, ...$this->jobDependencies());
+
+        $productTask = $productTask->fresh();
+        $this->assertSame(PublicationTaskStatus::PROCESSING, $productTask->status);
+        $this->assertNull($productTask->error);
+        Queue::assertPushed(CreateVkProductJob::class);
+        $this->assertDatabaseCount('vk_products', 0);
+    }
+
+    private function queuedStoryTask(): PublicationTask
+    {
+        $postTask = $this->createPostTask();
+        OfferImage::factory()->create([
+            'offer_id' => $postTask->publication->offer_id,
+            'original_url' => base_path('storage/app/assets/images/vkstory.png'),
+        ]);
+        $post = VkWallPost::factory()->forOffer($postTask->publication->offer_id)->forTask($postTask->id)->create();
+        $postTask->update(['external_id' => (string) $post->id, 'status' => PublicationTaskStatus::SUCCESS]);
+
+        return PublicationTask::factory()
+            ->for($postTask->publication)
+            ->ofType(PublicationTaskType::VK_STORY)
+            ->dependsOn($postTask)
+            ->withStatus(PublicationTaskStatus::QUEUED)
+            ->create();
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Jobs;
 
 use App\Helpers\BirthdayWishEligibility;
+use App\Helpers\VkApiErrorInspector;
 use App\Models\Agent;
 use App\Models\AgentVkFriend;
 use App\Services\StandardTextRenderer;
@@ -75,6 +76,19 @@ class WishHappyBirthdayJob implements ShouldQueue
             return;
         }
 
+        if (BirthdayWishEligibility::isDeniedForCurrentToken(
+            $friend->birthday_wish_denied_at,
+            $friend->birthday_wish_denied_token_hash,
+            BirthdayWishEligibility::tokenHash($vkUser->getToken()),
+        )) {
+            Log::channel('job')->warning('Поздравление не отправлено: у агента нет права на личные сообщения', [
+                'agent_id' => $this->agentId,
+                'friend_user_id' => $this->friendUserId,
+            ]);
+
+            return;
+        }
+
         if (! BirthdayWishEligibility::isEnabledForSex($setting, $friend->sex)) {
             Log::channel('job')->warning('Поздравление с днём рождения не отправлено: выключена настройка для пола получателя', [
                 'agent_id' => $this->agentId,
@@ -113,6 +127,28 @@ class WishHappyBirthdayJob implements ShouldQueue
                 'friend_user_id' => $this->friendUserId,
             ]);
         } catch (\Throwable $e) {
+            if (VkApiErrorInspector::isPermanentDirectMessageRefusal($e)) {
+                $friend->birthday_wish_denied_at = now()->toDateString();
+                $friend->birthday_wish_denied_token_hash = BirthdayWishEligibility::tokenHash($vkUser->getToken());
+                $friend->save();
+
+                $reason = VkApiErrorInspector::isAgentMessagesPermissionDenied($e)
+                    ? 'у агента нет права на личные сообщения'
+                    : 'пользователь запретил личные сообщения';
+
+                Log::channel('job')->warning('Поздравление не отправлено: '.$reason, [
+                    'agent_id' => $this->agentId,
+                    'friend_user_id' => $this->friendUserId,
+                ]);
+                Log::channel('vk')->error($e->getMessage(), [
+                    'agent_id' => $this->agentId,
+                    'friend_user_id' => $this->friendUserId,
+                    'permanent' => true,
+                ]);
+
+                return;
+            }
+
             Log::channel('job')->warning('Ошибка отправки поздравления с днём рождения', [
                 'agent_id' => $this->agentId,
                 'friend_user_id' => $this->friendUserId,

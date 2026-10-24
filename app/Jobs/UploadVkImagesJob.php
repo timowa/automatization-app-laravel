@@ -35,6 +35,8 @@ class UploadVkImagesJob implements ShouldQueue
 
     public int $tries = 1;
 
+    public int $timeout = 180;
+
     private const MAX_ATTEMPTS_PER_IMAGE = 3;
 
     private const RETRY_DELAY_MICROSECONDS = 500000;

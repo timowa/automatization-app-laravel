@@ -19,7 +19,7 @@ friends.getRequests → upsert в agent_vk_friend_requests
     ↓
 vk:process-friend-request-welcome
     ↓
-одна запись с message_id IS NULL → ProcessFriendRequestWelcomeJob
+одна запись с message_id IS NULL и welcome_permanently_failed = false → ProcessFriendRequestWelcomeJob
     ↓
 messages.send (текст + attachment photo{vk_user_id}_{media_id})
     ↓
@@ -91,6 +91,7 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 | `first_name`, `last_name`, … | Снимок из `friends.getRequests` |
 | `payload` | Сырой фрагмент ответа |
 | `message_id` | `NULL` — ещё не обработано; иначе ID сообщения во ВК |
+| `welcome_permanently_failed` | `true` — ВКонтакте постоянно отказал (приватность, нет права писать, пользователь недоступен). Такая заявка больше не выбирается. Временный сбой (лимит, обрыв связи) флаг не ставит |
 
 Константа `AGENT_ALREADY_MESSAGED_SENTINEL = 1` — зарезервированный sentinel (проверка «уже писал» через `messages.getHistory` в коде есть, но может быть отключена комментарием).
 
@@ -99,7 +100,7 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 | Команда | Расписание | Назначение |
 |---|---|---|
 | `vk:sync-friend-requests` | `0 0,6,12,18 * * *` | Диспатч sync-job по агентам с включённым флагом |
-| `vk:process-friend-request-welcome` | `everyFiveMinutes()` | Берёт одну необработанную заявку (`lockForUpdate`) и ставит welcome-job |
+| `vk:process-friend-request-welcome` | `everyFiveMinutes()` | Берёт самую старую заявку с `message_id IS NULL` и `welcome_permanently_failed = false` (`lockForUpdate`) и ставит welcome-job |
 
 Файлы: `app/Console/Commands/SyncFriendRequestsCommand.php`, `ProcessFriendRequestWelcomeCommand.php`; регистрация в `routes/console.php`.
 
@@ -123,6 +124,7 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 - Текст: `FriendRequestWelcomeText::resolve()`.
 - Attachment: `FriendRequestWelcomeText::photoAttachment(ownerId, mediaId)` при наличии визитки.
 - `sendDirectMessage` → атомарный `UPDATE … WHERE message_id IS NULL`.
+- Постоянный отказ `VkApiErrorInspector::isPermanentDirectMessageRefusal()` ставит `welcome_permanently_failed = true` и не пишет `message_id`. Временный сбой оставляет заявку в очереди.
 - Rate limit: `usleep(350_000)` перед отправкой.
 
 ## VkApiService (новые методы)
@@ -166,3 +168,4 @@ dt.columns().header().toArray().map(th => th.getAttribute('data-col'))
 - `2026_10_21_000001_add_friend_request_welcome_to_settings_table.php`
 - `2026_10_21_000002_create_agent_vk_friend_requests_table.php`
 - `2026_10_21_000003_create_agent_welcome_cards_and_link_settings.php`
+- `2026_10_24_000002_add_welcome_permanently_failed_to_agent_vk_friend_requests.php`

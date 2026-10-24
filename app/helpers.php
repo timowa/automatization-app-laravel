@@ -2,9 +2,10 @@
 
 declare(strict_types=1);
 
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
-if (!function_exists('viewJson')) {
+if (! function_exists('viewJson')) {
     function viewJson(bool $success = true, ?array $messages = null, ?string $redirect = null, array $extra = []): never
     {
         response()->json(array_merge([
@@ -16,13 +17,37 @@ if (!function_exists('viewJson')) {
     }
 }
 
-if (!function_exists('downloadFile')) {
+if (! function_exists('downloadFile')) {
     function downloadFile(string $url, string $directory): string
     {
-        $path = parse_url($url, PHP_URL_PATH);
-        $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+        $attempts = 3;
+        $timeoutSeconds = 30;
+        $lastError = 'Не удалось скачать файл';
 
-        if (!$extension) {
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                return downloadFileOnce($url, $directory, $timeoutSeconds);
+            } catch (RuntimeException $e) {
+                $lastError = $e->getMessage();
+                if (! isRetryableDownloadError($lastError) || $attempt === $attempts) {
+                    throw $e;
+                }
+
+                usleep(500_000);
+            }
+        }
+
+        throw new RuntimeException($lastError);
+    }
+}
+
+if (! function_exists('downloadFileOnce')) {
+    function downloadFileOnce(string $url, string $directory, int $timeoutSeconds): string
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+        $extension = strtolower(pathinfo((string) $path, PATHINFO_EXTENSION));
+
+        if (! $extension) {
             $extension = 'jpg';
         }
 
@@ -34,14 +59,17 @@ if (!function_exists('downloadFile')) {
         );
 
         $fp = fopen($filename, 'wb');
+        if ($fp === false) {
+            throw new RuntimeException('Не удалось создать файл для скачивания');
+        }
 
         $ch = curl_init($url);
 
         curl_setopt_array($ch, [
             CURLOPT_FILE => $fp,
             CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 15,
+            CURLOPT_CONNECTTIMEOUT => 10,
+            CURLOPT_TIMEOUT => $timeoutSeconds,
             CURLOPT_FAILONERROR => true,
             CURLOPT_USERAGENT => 'Mozilla/5.0',
         ]);
@@ -53,7 +81,7 @@ if (!function_exists('downloadFile')) {
             curl_close($ch);
             fclose($fp);
             @unlink($filename);
-            throw new RuntimeException($error);
+            throw new RuntimeException($error !== '' ? $error : 'Не удалось скачать файл');
         }
 
         curl_close($ch);
@@ -63,13 +91,28 @@ if (!function_exists('downloadFile')) {
     }
 }
 
-if (!function_exists('downloadFileGD')) {
+if (! function_exists('isRetryableDownloadError')) {
+    function isRetryableDownloadError(string $error): bool
+    {
+        $error = strtolower($error);
+
+        return str_contains($error, 'timed out')
+            || str_contains($error, '502')
+            || str_contains($error, '503')
+            || str_contains($error, '504')
+            || str_contains($error, 'connection')
+            || str_contains($error, 'recv failure')
+            || str_contains($error, 'could not resolve');
+    }
+}
+
+if (! function_exists('downloadFileGD')) {
     function downloadFileGD(string $url, string $directory): string
     {
         $path = parse_url($url, PHP_URL_PATH);
         $extension = strtolower(pathinfo($path, PATHINFO_EXTENSION));
 
-        if (!$extension) {
+        if (! $extension) {
             $extension = 'jpg';
         }
 
@@ -117,16 +160,16 @@ if (!function_exists('downloadFileGD')) {
 
         imagedestroy($image);
 
-        if (!$saved) {
+        if (! $saved) {
             @unlink($filename);
-            throw new RuntimeException('Failed to save image to ' . $filename);
+            throw new RuntimeException('Failed to save image to '.$filename);
         }
 
         return $filename;
     }
 }
 
-if (!function_exists('isImageUrl')) {
+if (! function_exists('isImageUrl')) {
     function isImageUrl(string $url): bool
     {
         $ch = curl_init($url);
@@ -144,6 +187,7 @@ if (!function_exists('isImageUrl')) {
 
         if (curl_errno($ch)) {
             curl_close($ch);
+
             return false;
         }
 
@@ -154,24 +198,24 @@ if (!function_exists('isImageUrl')) {
     }
 }
 
-if (!function_exists('formatPrice')) {
+if (! function_exists('formatPrice')) {
     function formatPrice(int $price): string
     {
         return number_format($price, 0, '', ' ');
     }
 }
 
-if (!function_exists('formatArea')) {
+if (! function_exists('formatArea')) {
     function formatArea(float $area): string
     {
         return number_format($area, 1, ',', ' ');
     }
 }
 
-if (!function_exists('phoneFormat')) {
+if (! function_exists('phoneFormat')) {
     function phoneFormat($phone)
     {
-        $mask = "#";
+        $mask = '#';
         $format = [
             '7' => '###-##-##',
             '10' => '+7 (###) ###-##-##',
@@ -188,13 +232,13 @@ if (!function_exists('phoneFormat')) {
             }
         }
 
-        $pattern = '/' . str_repeat('([0-9])?', substr_count($format, $mask)) . '(.*)/';
+        $pattern = '/'.str_repeat('([0-9])?', substr_count($format, $mask)).'(.*)/';
 
         $counter = 0;
         $format = preg_replace_callback(
             str_replace('#', $mask, '/([#])/'),
             function () use (&$counter) {
-                return '${' . (++$counter) . '}';
+                return '${'.(++$counter).'}';
             },
             $format
         );
@@ -202,7 +246,7 @@ if (!function_exists('phoneFormat')) {
         if ($phone) {
             $phone = trim(preg_replace($pattern, $format, $phone, 1));
             if (mb_substr($phone, 0, 1) == '7') {
-                $phone = '+' . $phone;
+                $phone = '+'.$phone;
             }
         }
 
@@ -210,16 +254,16 @@ if (!function_exists('phoneFormat')) {
     }
 }
 
-if (!function_exists('array_keys_from_column')) {
+if (! function_exists('array_keys_from_column')) {
     function array_keys_from_column($array, $column)
     {
-        if (!$array || !$column || empty(array_column($array, $column))) {
+        if (! $array || ! $column || empty(array_column($array, $column))) {
             return false;
         }
 
         $newArray = [];
         foreach ($array as $subArray) {
-            if (!empty($newArray[$subArray[$column]])) {
+            if (! empty($newArray[$subArray[$column]])) {
                 return false;
             }
 
@@ -230,14 +274,14 @@ if (!function_exists('array_keys_from_column')) {
     }
 }
 
-if (!function_exists('appLogger')) {
+if (! function_exists('appLogger')) {
     function appLogger(string $channel = 'job')
     {
         return Log::channel($channel);
     }
 }
 
-if (!function_exists('formatUiDate')) {
+if (! function_exists('formatUiDate')) {
     /**
      * Единый формат дат в пользовательском интерфейсе: dd-mm-YYYY.
      */
@@ -248,8 +292,8 @@ if (!function_exists('formatUiDate')) {
         }
 
         try {
-            return \Illuminate\Support\Carbon::parse($date)->format('d-m-Y');
-        } catch (\Throwable) {
+            return Carbon::parse($date)->format('d-m-Y');
+        } catch (Throwable) {
             return '—';
         }
     }

@@ -8,8 +8,9 @@ use App\Enums\City;
 use App\Enums\PublicationTaskStatus;
 use App\Exceptions\NotFoundException;
 use App\Helpers\PublicationTaskDependencyResolver;
+use App\Helpers\VkApiErrorInspector;
+use App\Jobs\Concerns\DefersVkFloodControlledTask;
 use App\Jobs\Concerns\MarksPublicationTaskFailedOnJobFailure;
-use App\Models\Agent;
 use App\Models\PublicationTask;
 use App\Models\VkGroup;
 use App\Models\VkProduct;
@@ -28,6 +29,7 @@ use VK\Exceptions\VKApiException;
 
 class CreateVkProductJob implements ShouldQueue
 {
+    use DefersVkFloodControlledTask;
     use Dispatchable;
     use InteractsWithQueue;
     use MarksPublicationTaskFailedOnJobFailure;
@@ -36,19 +38,20 @@ class CreateVkProductJob implements ShouldQueue
 
     public int $tries = 1;
 
+    public int $timeout = 180;
+
     public function __construct(
-        private readonly int $taskId
-    )
-    {
-    }
+        private readonly int $taskId,
+        private readonly int $floodAttempt = 0,
+    ) {}
 
     public function handle(VkApiService $vkApi,
-                           PublicationTaskDependencyResolver $taskDependencyResolver,
-                           TaskDispatcher $taskDispatcher): void
+        PublicationTaskDependencyResolver $taskDependencyResolver,
+        TaskDispatcher $taskDispatcher): void
     {
         $task = PublicationTask::findOrFail($this->taskId);
 
-        if ($task->status !== PublicationTaskStatus::QUEUED) {
+        if (! $this->shouldHandleTask($task)) {
             return;
         }
 
@@ -59,19 +62,19 @@ class CreateVkProductJob implements ShouldQueue
             $postId = $parentTask->external_id;
             $post = VkWallPost::find($postId);
 
-            if (!$post) {
+            if (! $post) {
                 throw new NotFoundException('Пост не найден');
             }
 
             $offer = $post->offer;
-            if (!$offer) {
+            if (! $offer) {
                 throw new NotFoundException('Оффер не найден');
             }
             $agent = $offer->agent;
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
-            if (!$vkUser || $vkUser->getToken() === '') {
+            if (! $vkUser || $vkUser->getToken() === '') {
                 throw new NotFoundException('Для агента не задан токен');
             }
 
@@ -83,6 +86,7 @@ class CreateVkProductJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
@@ -100,19 +104,20 @@ class CreateVkProductJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkPostContextFactory())->getContext($offer->id);
+            $context = (new VkPostContextFactory)->getContext($offer->id);
 
             $name = "{$context->getCategory()}, {$context->address}";
             $description = "Подробности по телефону: {$context->getAgentPhone()}. Агент: {$context->agentName}";
             $price = $context->price;
             $categoryId = (int) config('vk.market_category_id', 1);
 
-            $vkGroupIds = $vkApi->getGroupsWithMarketForUser((int)$vkUser->vk_user_id);
+            $vkGroupIds = $vkApi->getGroupsWithMarketForUser((int) $vkUser->vk_user_id);
             $groupIds = array_values(array_intersect($cityGroupIds, $vkGroupIds));
 
             if (empty($groupIds)) {
@@ -123,15 +128,41 @@ class CreateVkProductJob implements ShouldQueue
                 ]);
                 $taskDependencyResolver->release($this->taskId);
                 $taskDispatcher->dispatch($task->publication_id);
+
                 return;
             }
 
+            $failedGroups = [];
+            $failureMessages = [];
+
             foreach ($groupIds as $groupId) {
-                $imageUrls = $offer->images->pluck('original_url')->toArray();
-                $photoIds = $vkApi->uploadMarketPhoto((int)$groupId, $imageUrls);
+                $groupId = (int) $groupId;
+
                 try {
+                    $alreadyCreated = VkProduct::query()
+                        ->where('offer_id', $offer->id)
+                        ->where('group_id', $groupId)
+                        ->where('is_archived', false)
+                        ->exists();
+                    if ($alreadyCreated) {
+                        continue;
+                    }
+
+                    $imageUrls = $offer->images->pluck('original_url')->toArray();
+                    $photoIds = $vkApi->uploadMarketPhoto($groupId, $imageUrls);
+                    if (! $this->hasMainPhoto($photoIds)) {
+                        $failedGroups[] = $groupId;
+                        $failureMessages[] = 'Нет главного фото товара';
+                        Log::channel('vk')->warning('Товар не создан: нет главного фото', [
+                            'group_id' => $groupId,
+                            'offer_id' => $offer->id,
+                        ]);
+
+                        continue;
+                    }
+
                     $results = $vkApi->createProductsBatch(
-                        (int)$groupId,
+                        $groupId,
                         $name,
                         $description,
                         $price,
@@ -139,43 +170,50 @@ class CreateVkProductJob implements ShouldQueue
                         $photoIds
                     );
 
-                    foreach ($results as $result) {
-                        $groupId = $result['group_id'] ?? null;
-                        $response = $result['response'] ?? null;
-
-                        if ($groupId === null || $response === null) {
-                            continue;
-                        }
-
-                        $productId = is_array($response)
-                            ? ($response['market_item_id'] ?? null)
-                            : (int) $response;
-
-                        if ($productId === null || $productId === 0) {
-                            Log::channel('vk')->warning('Не удалось создать товар в группе', [
-                                'group_id' => $groupId,
-                                'offer_id' => $offer->id,
-                                'response' => $response,
-                                'result' => $result,
-                            ]);
-                            continue;
-                        }
-
-                        VkProduct::create([
+                    $productId = $this->productIdFromResult($results);
+                    if ($productId === null) {
+                        $failedGroups[] = $groupId;
+                        $failureMessages[] = 'ВКонтакте не вернул товар';
+                        Log::channel('vk')->warning('Не удалось создать товар в группе', [
+                            'group_id' => $groupId,
                             'offer_id' => $offer->id,
-                            'agent_id' => $agent->id,
-                            'group_id' => (int) $groupId,
-                            'product_id' => (int) $productId,
-                            'task_id' => $this->taskId,
                         ]);
+
+                        continue;
                     }
+
+                    VkProduct::create([
+                        'offer_id' => $offer->id,
+                        'agent_id' => $agent->id,
+                        'group_id' => $groupId,
+                        'product_id' => $productId,
+                        'task_id' => $this->taskId,
+                    ]);
                 } catch (\Throwable $th) {
-                    Log::channel('vk')->error('Ошибка создания товаров в группе ' . $groupId, [
+                    if (VkApiErrorInspector::isFlood($th)) {
+                        throw $th;
+                    }
+
+                    $failedGroups[] = $groupId;
+                    $failureMessages[] = $th->getMessage();
+                    Log::channel('vk')->error('Ошибка создания товаров в группе '.$groupId, [
                         'offer_id' => $offer->id,
                         'error' => $th->getMessage(),
                     ]);
-                    continue;
                 }
+            }
+
+            if ($failedGroups !== []) {
+                $task->update([
+                    'status' => PublicationTaskStatus::FAILED,
+                    'error' => $this->productFailureMessage($failureMessages),
+                ]);
+                Log::channel('job')->warning('Ошибка создания товаров по офферу', [
+                    'task_id' => $this->taskId,
+                    'failed_groups' => $failedGroups,
+                ]);
+
+                return;
             }
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS]);
@@ -189,25 +227,95 @@ class CreateVkProductJob implements ShouldQueue
         } catch (NotFoundException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('job')->warning('Ошибка создания товаров по офферу', ['task_id' => $this->taskId]);
-        } catch (VkApiException $e) {
+        } catch (VKApiException $e) {
+            if ($this->deferOnFlood($task, $e)) {
+                return;
+            }
+
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage() ?? '',
                 'description' => $e->getDescription(),
-                'vk_error' => $e->getError()
+                'vk_error' => $e->getError(),
             ]);
             Log::channel('job')->warning('Ошибка создания товаров по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
+            if ($this->deferOnFlood($task, $e)) {
+                return;
+            }
+
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
             Log::channel('vk')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
             ]);
             Log::channel('job')->warning('Ошибка создания товаров по офферу', ['task_id' => $this->taskId]);
         }
+    }
+
+    /**
+     * @param  list<mixed>  $photoIds
+     */
+    private function hasMainPhoto(array $photoIds): bool
+    {
+        $mainPhotoId = $photoIds[0] ?? null;
+
+        return is_numeric($mainPhotoId) && (int) $mainPhotoId > 0;
+    }
+
+    private function productIdFromResult(mixed $results): ?int
+    {
+        if (is_numeric($results) && (int) $results > 0) {
+            return (int) $results;
+        }
+
+        if (! is_array($results)) {
+            return null;
+        }
+
+        if (isset($results['market_item_id']) && is_numeric($results['market_item_id']) && (int) $results['market_item_id'] > 0) {
+            return (int) $results['market_item_id'];
+        }
+
+        foreach ($results as $result) {
+            if (! is_array($result)) {
+                continue;
+            }
+
+            $response = $result['response'] ?? null;
+            if (is_array($response) && isset($response['market_item_id']) && is_numeric($response['market_item_id'])) {
+                $productId = (int) $response['market_item_id'];
+
+                return $productId > 0 ? $productId : null;
+            }
+
+            if (is_numeric($response) && (int) $response > 0) {
+                return (int) $response;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<string>  $failureMessages
+     */
+    private function productFailureMessage(array $failureMessages): string
+    {
+        $unique = array_values(array_unique(array_filter($failureMessages, static fn (string $message): bool => $message !== '')));
+        if ($unique === []) {
+            return 'Не удалось создать товар. Задачу можно повторить.';
+        }
+
+        $message = implode('; ', $unique);
+        if (! str_contains($message, 'повторить')) {
+            $message .= ' Задачу можно повторить.';
+        }
+
+        return $message;
     }
 }

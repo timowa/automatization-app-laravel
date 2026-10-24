@@ -172,4 +172,35 @@ class PublishLoopStoriesCommandTest extends TestCase
         ));
         $this->assertCount(3, $calls);
     }
+
+    public function test_command_stops_loop_when_photo_link_is_dead(): void
+    {
+        if (! is_file(base_path('storage/app/assets/images/vkstory.png'))
+            || ! is_file(base_path('storage/app/assets/fonts/ProximaNova.ttf'))) {
+            $this->markTestSkipped('Нет файлов шаблона истории');
+        }
+
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        VkWallPost::factory()->forOffer($offer->id)->create();
+        OfferImage::factory()->create([
+            'offer_id' => $offer->id,
+            'original_url' => storage_path('app/tmp/missing-story-photo.jpg'),
+        ]);
+        $story = VkLoopStory::factory()->create([
+            'offer_id' => $offer->id,
+            'is_active' => true,
+            'last_published_at' => null,
+        ]);
+
+        $vkApi = new FakeVkApiService;
+        $this->app->instance(VkApiService::class, $vkApi);
+
+        $this->artisan('vk:publish-loop-stories')->assertSuccessful();
+
+        $story = $story->fresh();
+        $this->assertFalse($story->is_active);
+        $this->assertNull($story->last_published_at);
+        $this->assertEmpty(array_filter($vkApi->calls, fn (array $call): bool => $call['method'] === 'storiesPost'));
+    }
 }

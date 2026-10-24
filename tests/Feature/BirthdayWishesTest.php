@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use App\Enums\Vk\Sex;
+use App\Helpers\BirthdayWishEligibility;
 use App\Jobs\WishHappyBirthdayJob;
 use App\Models\Agent;
 use App\Models\AgentVkFriend;
@@ -14,6 +15,7 @@ use App\Services\Vk\FakeVkApiService;
 use App\Services\Vk\VkApiService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Tests\TestCase;
 
@@ -305,5 +307,81 @@ class BirthdayWishesTest extends TestCase
         $opened = AgentVkFriend::query()->where('agent_id', $agent->id)->where('user_id', 702)->first();
         $this->assertNull($closed?->last_birthday_wish_at);
         $this->assertSame('2026-10-16', $opened?->last_birthday_wish_at?->toDateString());
+    }
+
+    public function test_permanent_message_permission_denial_is_not_dispatched_until_token_changes(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-10-24'));
+
+        $agent = Agent::factory()->create();
+        $vkUser = VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token-before',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'wish_happy_birthday_male' => true,
+            'birthday_wish_male_text' => 'С днём рождения',
+        ]);
+
+        foreach ([701 => 'Access denied: no access to call this method', 702 => 'Permission to perform this action is denied'] as $userId => $error) {
+            AgentVkFriend::query()->create([
+                'agent_id' => $agent->id,
+                'user_id' => $userId,
+                'bdate' => '1990-10-24',
+                'first_name' => 'Иван',
+                'last_name' => 'Иванов',
+                'sex' => Sex::MALE->value,
+            ]);
+        }
+        AgentVkFriend::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 703,
+            'bdate' => '1990-10-24',
+            'first_name' => 'Пётр',
+            'last_name' => 'Петров',
+            'sex' => Sex::MALE->value,
+        ]);
+
+        $logged = [];
+        Log::listen(function (object $event) use (&$logged): void {
+            $logged[] = (string) ($event->message ?? '');
+        });
+
+        $fake = new FakeVkApiService;
+        $fake->setFailNext('RuntimeException', 'Access denied: no access to call this method');
+        (new WishHappyBirthdayJob($agent->id, 701))->handle($fake);
+        $fake->setFailNext('RuntimeException', 'Permission to perform this action is denied');
+        (new WishHappyBirthdayJob($agent->id, 702))->handle($fake);
+
+        $expectedHash = BirthdayWishEligibility::tokenHash('token-before');
+        foreach ([701, 702] as $userId) {
+            $friend = AgentVkFriend::query()->where('agent_id', $agent->id)->where('user_id', $userId)->first();
+            $this->assertNull($friend?->last_birthday_wish_at);
+            $this->assertSame('2026-10-24', $friend?->birthday_wish_denied_at?->toDateString());
+            $this->assertSame($expectedHash, $friend?->birthday_wish_denied_token_hash);
+        }
+
+        $this->assertTrue(collect($logged)->contains(
+            fn (string $message): bool => str_contains($message, 'у агента нет права на личные сообщения')
+        ));
+        $this->assertFalse(collect($logged)->contains(
+            fn (string $message): bool => str_contains($message, 'token-before')
+        ));
+
+        Queue::fake();
+        $this->artisan('vk:dispatch-birthday-wishes')
+            ->expectsOutput('Поздравлений запланировано: 1')
+            ->assertSuccessful();
+        Queue::assertPushed(WishHappyBirthdayJob::class, 1);
+        Queue::assertPushed(WishHappyBirthdayJob::class, fn (WishHappyBirthdayJob $job): bool => $job->friendUserId === 703);
+        Queue::assertNotPushed(WishHappyBirthdayJob::class, fn (WishHappyBirthdayJob $job): bool => $job->friendUserId === 701);
+
+        $vkUser->update(['vk_token' => 'token-after']);
+        Queue::fake();
+        $this->artisan('vk:dispatch-birthday-wishes')->assertSuccessful();
+        Queue::assertPushed(WishHappyBirthdayJob::class, fn (WishHappyBirthdayJob $job): bool => $job->friendUserId === 701);
+        Queue::assertPushed(WishHappyBirthdayJob::class, fn (WishHappyBirthdayJob $job): bool => $job->friendUserId === 702);
     }
 }

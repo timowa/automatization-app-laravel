@@ -25,6 +25,7 @@ class AgentVkFriendRequest extends Model
         'track_code',
         'payload',
         'message_id',
+        'welcome_permanently_failed',
     ];
 
     protected $casts = [
@@ -35,6 +36,7 @@ class AgentVkFriendRequest extends Model
         'mutual_count' => 'integer',
         'payload' => 'array',
         'message_id' => 'integer',
+        'welcome_permanently_failed' => 'boolean',
     ];
 
     public function agent(): BelongsTo

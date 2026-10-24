@@ -21,6 +21,7 @@ use App\Services\Vk\Stories\Templates\SaleStoriesTemplate;
 use App\Services\Vk\Stories\VkStoriesContext;
 use App\Services\Vk\Stories\VkStoriesContextFactory;
 use App\Services\Vk\Stories\VkStoriesGenerator;
+use App\Services\Vk\Stories\VkStoryPoster;
 use App\Services\Vk\VkApiService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -91,7 +92,7 @@ class CreateVkStoriesJob implements ShouldQueue
             $image = (new VkStoriesGenerator)->generate($context, $template);
 
             try {
-                $res = $vkApi->storiesPost($post->getFullId(), $image);
+                $res = (new VkStoryPoster)->post($vkApi, $post->getFullId(), $image);
 
                 if (! VkApiService::isStorySaveSuccessful($res)) {
                     throw new VkStoryNotSavedException(

@@ -7,9 +7,13 @@ namespace App\Services\Vk;
 use App\Exceptions\VkStoryNotSavedException;
 use App\Helpers\ImageWatermarker;
 use App\Helpers\VkApiErrorInspector;
+use App\Logging\SensitiveDataRedactor;
 use Exception;
 use GuzzleHttp\Client;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
 use Illuminate\Support\Facades\Log;
+use Psr\Http\Message\ResponseInterface;
 use VK\Client\Enums\VKLanguage;
 use VK\Client\VKApiClient;
 use VK\Exceptions\Api\VKApiAccessGroupsException;
@@ -77,12 +81,20 @@ class VkApiService
 
     private function extendHttpTimeout(VKApiClient $client): void
     {
+        $guard = new VkApiResponseGuard(new SensitiveDataRedactor);
+        $stack = HandlerStack::create();
+        $stack->unshift(Middleware::mapResponse(
+            static fn (ResponseInterface $response): ResponseInterface => $guard->sanitize($response),
+        ));
+
         $request = $client->getRequest();
         $property = new \ReflectionProperty($request, 'client');
-        $property->setValue($request, new \VK\Transport\Client([
+        $property->setValue($request, new Client([
             'base_uri' => 'https://api.vk.com/method',
             'timeout' => self::HTTP_TIMEOUT_SECONDS,
             'connect_timeout' => 10,
+            'http_errors' => false,
+            'handler' => $stack,
         ]));
     }
 
@@ -754,6 +766,10 @@ VKSCRIPT;
                 ];
 
             } catch (\Throwable $th) {
+                if (VkApiErrorInspector::isFlood($th)) {
+                    throw $th;
+                }
+
                 Log::channel('vk-images')->error('Ошибка при получении изображения: '.$th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
 
                 continue;
@@ -782,16 +798,30 @@ VKSCRIPT;
                 ],
             ]);
 
-            $res = json_decode(
+            $decoded = json_decode(
                 $saveResponse->getBody()->getContents(),
                 true,
                 512,
                 JSON_THROW_ON_ERROR);
 
-            $attachments = array_column($res['response'], 'photo_id');
+            $response = is_array($decoded) ? ($decoded['response'] ?? null) : null;
+            if (! is_array($response)) {
+                Log::channel('vk-images')->error('ВКонтакте не вернул фото товара', [
+                    'response' => is_array($decoded) ? $this->redactSecrets($decoded) : null,
+                ]);
+            } else {
+                $attachments = array_values(array_filter(
+                    array_column($response, 'photo_id'),
+                    static fn (mixed $id): bool => is_numeric($id) && (int) $id > 0,
+                ));
+            }
 
         } catch (\Throwable $th) {
             Log::channel('vk-images')->error('Ошибка при загрузке изображения: '.$th->getMessage(), ['trace' => $th->getTraceAsString(), 'file' => $th->getFile(), 'line' => $th->getLine()]);
+
+            if (VkApiErrorInspector::isFlood($th)) {
+                throw $th;
+            }
         }
 
         foreach ($files as $file) {
@@ -808,6 +838,10 @@ VKSCRIPT;
     public function createProductsBatch(int $groupId, string $name, string $description, int $price, int $categoryId, array $photoIds): array
     {
         $mainPhotoId = $photoIds[0] ?? null;
+        if (! is_numeric($mainPhotoId) || (int) $mainPhotoId <= 0) {
+            throw new \RuntimeException('Нет главного фото товара');
+        }
+
         $photoIdsStr = implode(',', array_slice($photoIds, 1));
         $res = $this->client->market()->add($this->token, [
             'name' => $name,

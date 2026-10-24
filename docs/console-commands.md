@@ -32,8 +32,10 @@ Artisan-команды для фоновых задач: проверка ток
 2. Для каждой:
    - Находит пост и оффер.
    - Генерирует баннер через `VkStoriesGenerator`.
-   - Загружает через `vkApi->storiesPost()`.
-   - Обновляет `last_published_at = now()`.
+   - Загружает через `VkStoryPoster` (до 3 попыток на код 1, HTTP 405 и обрыв связи).
+   - При успехе обновляет `last_published_at = now()`.
+   - Если ссылка на фото недоступна (`StoryPublicationSkippedException` с текстом про недоступную ссылку или 404), ставит `is_active = false` и не сдвигает `last_published_at`.
+   - Обрыв связи после исчерпания попыток не сдвигает `last_published_at`: цикл остаётся к следующему запуску.
 3. `usleep(350_000)` между итерациями.
 
 Шаблон истории выбирается по типу сделки (SaleStoriesTemplate / RentStoriesTemplate).
@@ -120,9 +122,28 @@ Artisan-команды для фоновых задач: проверка ток
 
 Расписание: каждые 5 минут.
 
-Берёт одну запись `agent_vk_friend_requests` с `message_id IS NULL` (`lockForUpdate`) и диспатчит `ProcessFriendRequestWelcomeJob`.
+Берёт самую старую запись `agent_vk_friend_requests` с `message_id IS NULL` и `welcome_permanently_failed = false` (`lockForUpdate`) и диспатчит `ProcessFriendRequestWelcomeJob`. Постоянный отказ ВКонтакте помечает заявку и больше её не выбирает.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
+
+### vk:dispatch-birthday-wishes
+
+**Файл:** `app/Console/Commands/DispatchBirthdayWishesCommand.php`
+
+Расписание: каждый день в 04:00 по времени приложения.
+
+Ставит `WishHappyBirthdayJob` друзьям с полной датой рождения сегодня, возрастом 18–70 и включённой настройкой пола. Уже поздравленные в этом году (`last_birthday_wish_at`) не попадают в очередь.
+
+Постоянный отказ ВКонтакте (`Access denied: no access to call this method`, `Permission to perform this action is denied` и другие отказы личного сообщения) пишет в `agents_vk_friends`:
+
+- `birthday_wish_denied_at` — дата отказа;
+- `birthday_wish_denied_token_hash` — SHA-256 текущего токена, сам токен не сохраняется и не логируется.
+
+Пока год отказа совпадает с текущим и хеш совпадает с токеном агента, задача снова не ставится. Смена токена или следующий год снова допускают попытку. В канал `job` пишется причина «у агента нет права на личные сообщения». Успешная отправка по-прежнему заполняет только `last_birthday_wish_at`.
+
+Синхронизация друзей эти два поля не перезаписывает (`SyncAgentVkFriendsAction::UPDATE_COLUMNS`).
+
+Миграция: `2026_10_24_000003_add_birthday_wish_denial_to_agents_vk_friends.php`.
 
 ### logs:query
 
