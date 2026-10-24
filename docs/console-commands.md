@@ -55,14 +55,21 @@ Artisan-команды для фоновых задач: проверка ток
 
 **Файл:** `app/Console/Commands/NotifyChangelogCommand.php`
 
-Уведомление о последней версии продукта из `config/changelog.php`. Запускается при деплое на прод (GitHub Actions).
+Уведомление о последней версии продукта из `config/changelog.php`. Запускается при деплое на прод (GitHub Actions). Повторный деплой той же версии сообщение не отправляет.
 
 Поток:
 1. Берёт первый релиз через `ChangelogService::latest(1)`.
-2. Формирует текст: версия, дата и список изменений.
-3. Отправляет через `vkApi->sendTechMessage()` фиксированным получателям от имени сообщества.
-4. Логирует: info в канал `job` при успехе, warning в `job` + error в `vk` при ошибке.
-5. Если релизов нет — завершается успешно без отправки.
+2. Сравнивает `version` с последней строкой `changelog_notifications` (`orderByDesc('id')`).
+3. Если версия та же — завершается успешно без отправки. В канал `job` пишется info.
+4. Формирует текст: версия, дата и список изменений.
+5. Отправляет через `vkApi->sendTechMessage()` фиксированным получателям от имени сообщества.
+6. После успешной отправки добавляет строку в `changelog_notifications` (`version`, `notified_at`). Если отправка упала, строка не пишется, следующий запуск повторит её.
+7. Логирует: info в канал `job` при успехе, warning в `job` + error в `vk` при ошибке.
+8. Если релизов нет — завершается успешно без отправки.
+
+Таблица `changelog_notifications`: `id`, `version`, `notified_at`. Модели нет, чтение и запись через `DB`.
+
+> ВАЖНО: миграция `2026_10_24_000001_create_changelog_notifications_table` сразу записывает `config('changelog.current')`, чтобы деплой этой таблицы не отправил уже объявленную версию повторно.
 
 ### vk:sync-users
 
@@ -116,6 +123,16 @@ Artisan-команды для фоновых задач: проверка ток
 Берёт одну запись `agent_vk_friend_requests` с `message_id IS NULL` (`lockForUpdate`) и диспатчит `ProcessFriendRequestWelcomeJob`.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
+
+### logs:query
+
+**Файл:** `app/Console/Commands/QueryLogsCommand.php`
+
+Выборка из JSONL-журналов: группы одинаковых ошибок, число повторов, время первого и последнего появления, короткие примеры. Если передан `--request`, в ответе есть связанные события этого запроса.
+
+По умолчанию интервал — последние 24 часа. Каталог — `storage/logs`. Тот же контракт отдаёт MCP-инструмент `query_logs`.
+
+Подробнее: [logging.md](logging.md).
 
 ### app:truncate
 

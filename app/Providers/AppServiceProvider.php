@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Logging\OperationContext;
 use App\Services\ChangelogService;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
@@ -14,6 +15,8 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(ChangelogService::class);
+        $this->app->singleton(OperationContext::class);
+        $this->app->make(OperationContext::class)->registerJobBoundary();
     }
 
     /**
@@ -21,6 +24,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->app->make(OperationContext::class)->registerRuntimeListeners();
+
         View::composer('layout', function ($view): void {
             $changelog = app(ChangelogService::class);
 
@@ -32,4 +37,3 @@ class AppServiceProvider extends ServiceProvider
         });
     }
 }
-

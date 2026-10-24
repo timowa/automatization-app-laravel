@@ -1,12 +1,19 @@
 <?php
 
+use App\Logging\ConfigureStructuredLogging;
 use Monolog\Handler\NullHandler;
 use Monolog\Handler\StreamHandler;
 use Monolog\Handler\SyslogUdpHandler;
 use Monolog\Processor\PsrLogMessageProcessor;
 
+$jsonTap = static fn (string $channel): array => [
+    'tap' => [ConfigureStructuredLogging::class.':'.$channel],
+];
+
 return [
     'default' => env('LOG_CHANNEL', 'stack'),
+
+    'commit_sha' => env('APP_COMMIT_SHA'),
 
     'deprecations' => [
         'channel' => env('LOG_DEPRECATIONS_CHANNEL', 'null'),
@@ -18,7 +25,7 @@ return [
         'stack' => [
             'driver' => 'stack',
             'channels' => explode(',', (string) env('LOG_STACK', 'single')),
-            'ignore_exceptions' => false,
+            'ignore_exceptions' => true,
         ],
 
         'single' => [
@@ -26,6 +33,7 @@ return [
             'path' => storage_path('logs/laravel.log'),
             'level' => env('LOG_LEVEL', 'debug'),
             'replace_placeholders' => true,
+            ...$jsonTap('single'),
         ],
 
         'daily' => [
@@ -34,6 +42,7 @@ return [
             'level' => env('LOG_LEVEL', 'debug'),
             'days' => env('LOG_DAILY_DAYS', 7),
             'replace_placeholders' => true,
+            ...$jsonTap('daily'),
         ],
 
         'vk' => [
@@ -42,6 +51,7 @@ return [
             'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('vk'),
         ],
 
         'vkRepost' => [
@@ -50,6 +60,7 @@ return [
             'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('vkRepost'),
         ],
 
         'vk-sync' => [
@@ -58,6 +69,7 @@ return [
             'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('vk-sync'),
         ],
 
         'vk-images' => [
@@ -66,6 +78,7 @@ return [
             'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('vk-images'),
         ],
 
         'check_tokens' => [
@@ -74,6 +87,7 @@ return [
             'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('check_tokens'),
         ],
 
         'stats' => [
@@ -82,6 +96,7 @@ return [
             'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('stats'),
         ],
 
         'job' => [
@@ -90,6 +105,7 @@ return [
             'level' => 'info',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('job'),
         ],
 
         'llm' => [
@@ -98,6 +114,7 @@ return [
             'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
+            ...$jsonTap('llm'),
         ],
 
         'slack' => [

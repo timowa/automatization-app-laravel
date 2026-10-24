@@ -134,6 +134,45 @@ function briefContext(context) {
   return cut.length > 160 ? `${cut.slice(0, 160)}…` : cut;
 }
 
+function parseSummaryLine(raw) {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith('{')) {
+    try {
+      const row = JSON.parse(trimmed);
+      let level = String(row.level || '').toUpperCase();
+      if (level === 'CRITICAL' || level === 'ALERT' || level === 'EMERGENCY') {
+        level = 'ERROR';
+      }
+      if (!['INFO', 'WARNING', 'ERROR'].includes(level)) {
+        return null;
+      }
+      const context = row.context && typeof row.context === 'object' ? JSON.stringify(row.context) : '';
+
+      return {
+        at: typeof row.timestamp === 'string' ? row.timestamp : null,
+        level,
+        message: String(row.message || '').trim(),
+        context,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  const match = trimmed.match(LINE);
+  if (match === null) {
+    return null;
+  }
+  const brace = match[3].indexOf(' {');
+
+  return {
+    at: match[1],
+    level: match[2],
+    message: (brace === -1 ? match[3] : match[3].slice(0, brace)).trim(),
+    context: brace === -1 ? '' : match[3].slice(brace + 1).trim(),
+  };
+}
+
 export function summarizeLog(text) {
   const counts = { INFO: 0, WARNING: 0, ERROR: 0 };
   const groups = new Map();
@@ -141,19 +180,15 @@ export function summarizeLog(text) {
   let last = null;
 
   for (const raw of text.split(/\r?\n/)) {
-    const match = raw.match(LINE);
-    if (match === null) {
+    const parsed = parseSummaryLine(raw);
+    if (parsed === null) {
       continue;
     }
 
-    const [, at, level, rest] = match;
+    const { at, level, message, context } = parsed;
     first ??= at;
     last = at;
     counts[level] += 1;
-
-    const brace = rest.indexOf(' {');
-    const message = (brace === -1 ? rest : rest.slice(0, brace)).trim();
-    const context = brace === -1 ? '' : rest.slice(brace + 1).trim();
     const key = `${level}|${message.replace(/\d+/g, '#')}`;
     let group = groups.get(key);
     if (group === undefined) {
@@ -347,7 +382,15 @@ if (process.argv.includes('--self-test')) {
     && report.missing_files.includes('vkRepost')
     && report.download_errors.some((item) => item.channel === 'vk-sync')
     && !JSON.stringify(report).includes('Загрузка изображения');
-  if (!ok) {
+  const jsonSummary = summarizeLog([
+    '{"timestamp":"2026-10-22T00:05:00Z","level":"ERROR","message":"Permission denied","context":{"task_id":4}}',
+    '{"timestamp":"2026-10-22T00:06:00Z","level":"INFO","message":"ok","context":{}}',
+  ].join('\n'));
+  const jsonOk = jsonSummary.counts.ERROR === 1
+    && jsonSummary.counts.INFO === 1
+    && jsonSummary.errors.length === 1
+    && jsonSummary.errors[0].message === 'Permission denied';
+  if (!ok || !jsonOk) {
     process.stderr.write('self-test failed\n');
     process.exit(1);
   }

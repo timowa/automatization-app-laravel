@@ -96,7 +96,9 @@
 
 ### appLogger(string $channel = 'job')
 
-Возвращает `Log::channel($channel)`. Обёртка для удобства.
+Возвращает `Log::channel($channel)`. Запись уходит в JSONL-журнал этого канала.
+
+Подробнее: [logging.md](logging.md).
 
 ## Трейты
 

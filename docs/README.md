@@ -20,6 +20,7 @@
 | [friend-request-welcome.md](friend-request-welcome.md) | Автоприветствие на заявку в друзья: настройки, визитка, sync/process |
 | [console-commands.md](console-commands.md) | Artisan-команды |
 | [helpers.md](helpers.md) | Вспомогательные классы, функции, трейты, исключения |
+| [logging.md](logging.md) | Структурированные журналы и сборщик для разбора ошибок |
 
 ## Общий поток
 
