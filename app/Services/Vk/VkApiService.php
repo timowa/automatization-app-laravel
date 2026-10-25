@@ -36,9 +36,9 @@ class VkApiService
 
     /**
      * Заявок одного агента в одном execute.
-     * Потолок 12: на заявку до двух вызовов, внутри execute их не больше 25.
+     * Потолок 4: на заявку до двух вызовов, внутри execute их не больше 25.
      */
-    public const WELCOME_BATCH_LIMIT = 12;
+    public const WELCOME_BATCH_LIMIT = 4;
 
     private const EXECUTE_URI = 'https://api.vk.com/method/execute';
 
