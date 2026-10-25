@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Psr\Http\Message\ResponseInterface;
 use VK\Client\Enums\VKLanguage;
 use VK\Client\VKApiClient;
+use VK\Client\VKApiError;
+use VK\Exceptions\Api\ExceptionMapper;
 use VK\Exceptions\Api\VKApiAccessGroupsException;
 use VK\Exceptions\Api\VKApiWallAddPostException;
 use VK\Exceptions\Api\VKApiWallAdsPostLimitReachedException;
@@ -32,7 +34,15 @@ class VkApiService
 
     public const HTTP_TIMEOUT_SECONDS = 30;
 
-    public const WELCOME_BATCH_LIMIT = 25;
+    /**
+     * Заявок одного агента в одном execute.
+     * Потолок 12: на заявку до двух вызовов, внутри execute их не больше 25.
+     */
+    public const WELCOME_BATCH_LIMIT = 12;
+
+    private const EXECUTE_URI = 'https://api.vk.com/method/execute';
+
+    public const ALREADY_WROTE_ERROR = 'Агент уже написал пользователю';
 
     public const FRIEND_FIELDS = [
         'bdate',
@@ -74,6 +84,8 @@ class VkApiService
 
     protected VKApiClient $client;
 
+    private Client $http;
+
     public function setToken(string $token): void
     {
         $this->token = $token;
@@ -89,15 +101,88 @@ class VkApiService
             static fn (ResponseInterface $response): ResponseInterface => $guard->sanitize($response),
         ));
 
-        $request = $client->getRequest();
-        $property = new \ReflectionProperty($request, 'client');
-        $property->setValue($request, new Client([
+        $this->http = new Client([
             'base_uri' => 'https://api.vk.com/method',
             'timeout' => self::HTTP_TIMEOUT_SECONDS,
             'connect_timeout' => 10,
             'http_errors' => false,
             'handler' => $stack,
-        ]));
+        ]);
+
+        $request = $client->getRequest();
+        $property = new \ReflectionProperty($request, 'client');
+        $property->setValue($request, $this->http);
+    }
+
+    /**
+     * execute уходит POST-телом. Метод SDK кладёт code в адрес и на длинном
+     * скрипте ВКонтакте отвечает 414 Request-URI Too Large.
+     * Свыше 2 КБ документация просит multipart/form-data.
+     *
+     * @return array{uri: string, multipart: list<array{name: string, contents: string}>}
+     */
+    public static function executeRequest(string $code, string $token, string $version, string $lang): array
+    {
+        return [
+            'uri' => self::EXECUTE_URI,
+            'multipart' => [
+                ['name' => 'code', 'contents' => $code],
+                ['name' => 'access_token', 'contents' => $token],
+                ['name' => 'v', 'contents' => $version],
+                ['name' => 'lang', 'contents' => $lang],
+            ],
+        ];
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    private function execute(string $code): mixed
+    {
+        $request = self::executeRequest(
+            $code,
+            $this->token,
+            (string) config('vk.version', '5.199'),
+            VKLanguage::RUSSIAN,
+        );
+        $response = $this->http->post($request['uri'], [
+            'multipart' => $request['multipart'],
+        ]);
+
+        return $this->parseExecuteResponse($response);
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    private function parseExecuteResponse(ResponseInterface $response): mixed
+    {
+        $status = $response->getStatusCode();
+        if ($status !== 200) {
+            throw new VKClientException('Invalid http status: '.$status);
+        }
+
+        $decoded = json_decode((string) $response->getBody(), true);
+        if (! is_array($decoded)) {
+            $decoded = [];
+        }
+
+        if (isset($decoded['error'])) {
+            $error = $decoded['error'];
+            if (! is_array($error)) {
+                throw new VKClientException('execute вернул ошибку без описания');
+            }
+
+            throw ExceptionMapper::parse(new VKApiError($error));
+        }
+
+        if (array_key_exists('response', $decoded)) {
+            return $decoded['response'];
+        }
+
+        return $decoded;
     }
 
     /**
@@ -346,9 +431,7 @@ class VkApiService
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 
     /**
@@ -570,195 +653,133 @@ VKSCRIPT;
     }
 
     /**
-     * До 25 пользователей одним execute: у кого уже есть исходящее сообщение.
+     * История и отправка приветствий одним execute. Вызов как в createReposts.
      *
-     * @param  list<int>  $userIds
-     * @return list<int>
-     *
-     * @throws VKApiException
-     * @throws VKClientException
-     */
-    public function findUsersWithOutgoingMessages(array $userIds): array
-    {
-        $peers = [];
-        foreach ($userIds as $userId) {
-            $userId = (int) $userId;
-            if ($userId > 0) {
-                $peers[$userId] = $userId;
-            }
-        }
-        $peers = array_slice(array_values($peers), 0, self::WELCOME_BATCH_LIMIT);
-        if ($peers === []) {
-            return [];
-        }
-
-        $rows = $this->client->getRequest()->post('execute', $this->token, [
-            'code' => self::outgoingHistoryExecuteCode($peers),
-        ]);
-        if (! is_array($rows)) {
-            return [];
-        }
-
-        return self::userIdsWithOutgoingMessages($peers, $rows);
-    }
-
-    /**
-     * До 25 вызовов messages.getHistory без условий: в VKScript if принимает только boolean.
-     *
-     * @param  list<int>  $userIds
-     */
-    public static function outgoingHistoryExecuteCode(array $userIds): string
-    {
-        $calls = [];
-        foreach ($userIds as $userId) {
-            $calls[] = 'API.messages.getHistory({"user_id":'.(int) $userId.',"count":20})';
-        }
-
-        return 'return ['.implode(',', $calls).'];';
-    }
-
-    /**
-     * @param  list<int>  $userIds
-     * @param  list<mixed>  $rows
-     * @return list<int>
-     */
-    public static function userIdsWithOutgoingMessages(array $userIds, array $rows): array
-    {
-        $outgoing = [];
-        foreach (array_values($userIds) as $index => $userId) {
-            $row = $rows[$index] ?? null;
-            if (! is_array($row) || ! is_array($row['items'] ?? null)) {
-                continue;
-            }
-
-            foreach ($row['items'] as $item) {
-                if (is_array($item) && (int) ($item['out'] ?? 0) === 1) {
-                    $outgoing[] = (int) $userId;
-                    break;
-                }
-            }
-        }
-
-        return array_values(array_filter($outgoing, fn (int $id): bool => $id > 0));
-    }
-
-    /**
-     * До 25 личных сообщений одним execute. Отказ одного пользователя не отменяет остальных.
-     *
-     * @param  list<array{user_id:int, message:string, attachment?:string|null}>  $messages
-     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     * @param  list<array{user_id:int, message:string, random_id?:int, attachment?:string|null}>  $messages
+     * @return list<array{user_id:int, message_id:?int, error:?string}>
      *
      * @throws VKApiException
      * @throws VKClientException
      * @throws \JsonException
      */
-    public function sendDirectMessages(array $messages): array
+    public function sendWelcomeBatch(array $messages): array
     {
         $payload = [];
         foreach (array_slice($messages, 0, self::WELCOME_BATCH_LIMIT) as $message) {
-            $item = [
-                'user_id' => (int) $message['user_id'],
-                'message' => (string) $message['message'],
-                'random_id' => random_int(1, 2_147_483_647),
+            $userId = (int) ($message['user_id'] ?? 0);
+            $text = (string) ($message['message'] ?? '');
+            if ($userId <= 0 || $text === '') {
+                continue;
+            }
+
+            $attachment = $message['attachment'] ?? '';
+            $payload[] = [
+                'user_id' => $userId,
+                'message' => $text,
+                'random_id' => (int) ($message['random_id'] ?? random_int(1, 2_147_483_647)),
+                'attachment' => is_string($attachment) ? $attachment : '',
             ];
-            $attachment = $message['attachment'] ?? null;
-            if (is_string($attachment) && $attachment !== '') {
-                $item['attachment'] = $attachment;
-            }
-            if ($item['user_id'] > 0 && $item['message'] !== '') {
-                $payload[] = $item;
-            }
         }
         if ($payload === []) {
             return [];
         }
 
-        $rows = $this->client->getRequest()->post('execute', $this->token, [
-            'code' => self::directMessagesExecuteCode($payload),
-        ]);
+        $rows = $this->execute(self::welcomeExecuteCode($payload));
 
-        return self::mapDirectMessageResults($payload, [
-            'response' => $rows,
-        ]);
+        return self::mapWelcomeReports($payload, $rows);
     }
 
     /**
-     * До 25 вызовов messages.send. Вложение добавляется в PHP, чтобы в VKScript не было if по строке.
+     * VKScript: на каждую заявку один отчёт {user_id, message_id, error}.
+     * if получает только boolean. Ответ messages.send при ошибке — false,
+     * а false > 0 обрывает скрипт, поэтому номер берём через parseInt("" + sent).
      *
-     * @param  list<array{user_id:int, message:string, random_id:int, attachment?:string}>  $payload
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
+     *
+     * @throws \JsonException
      */
-    public static function directMessagesExecuteCode(array $payload): string
+    public static function welcomeExecuteCode(array $items): string
     {
-        $calls = [];
-        foreach ($payload as $item) {
-            $params = [
-                'peer_id' => (int) $item['user_id'],
-                'message' => (string) $item['message'],
-                'random_id' => (int) $item['random_id'],
-                'dont_parse_links' => 1,
-            ];
-            $attachment = $item['attachment'] ?? null;
-            if (is_string($attachment) && $attachment !== '') {
-                $params['attachment'] = $attachment;
-            }
-            $calls[] = 'API.messages.send('.json_encode(
-                $params,
-                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
-            ).')';
-        }
+        $encoded = json_encode(
+            array_values($items),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+        $alreadyWrote = self::ALREADY_WROTE_ERROR;
 
-        return 'return ['.implode(',', $calls).'];';
+        return <<<VKSCRIPT
+var items = {$encoded};
+var res = [];
+var i = 0;
+while (i < items.length) {
+    var item = items[i];
+    var history = API.messages.getHistory({"user_id":item.user_id,"count":1});
+    var hasHistory = history.count > 0;
+
+    if (hasHistory) {
+        res.push({"user_id":item.user_id,"message_id":null,"error":"{$alreadyWrote}"});
+    } else {
+        var hasAttachment = item.attachment.length > 0;
+        var sent = null;
+        if (hasAttachment) {
+            sent = API.messages.send({"peer_id":item.user_id,"message":item.message,"random_id":item.random_id,"attachment":item.attachment,"dont_parse_links":1});
+        } else {
+            sent = API.messages.send({"peer_id":item.user_id,"message":item.message,"random_id":item.random_id,"dont_parse_links":1});
+        }
+        var sentId = parseInt("" + sent);
+        var sentOk = sentId > 0;
+        if (sentOk) {
+            res.push({"user_id":item.user_id,"message_id":sentId,"error":null});
+        } else {
+            res.push({"user_id":item.user_id,"message_id":null,"error":sent});
+        }
+    }
+    i = i + 1;
+}
+return res;
+VKSCRIPT;
     }
 
     /**
-     * @param  list<array{user_id:int, message:string, random_id:int, attachment?:string}>  $payload
-     * @param  array<string, mixed>  $body
-     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
+     * @return list<array{user_id:int, message_id:?int, error:?string}>
      *
      * @throws VKClientException
      */
-    public static function mapDirectMessageResults(array $payload, array $body): array
+    public static function mapWelcomeReports(array $items, mixed $rows): array
     {
-        $rows = $body['response'] ?? null;
-        if (! is_array($rows) || ! array_is_list($rows)) {
-            throw new VKClientException('execute не вернул список сообщений');
+        if (! is_array($rows) || ! array_is_list($rows) || count($rows) !== count($items)) {
+            throw new VKClientException('execute не вернул отчёт по каждой заявке');
         }
 
-        $errors = [];
-        foreach (is_array($body['execute_errors'] ?? null) ? $body['execute_errors'] : [] as $error) {
-            if (is_array($error)) {
-                $errors[] = $error;
-            }
-        }
-
-        $errorIndex = 0;
         $results = [];
-        foreach ($payload as $index => $item) {
+        foreach (array_values($items) as $index => $item) {
             $row = $rows[$index] ?? null;
-            $response = is_array($row) ? ($row['response'] ?? null) : $row;
-            $messageId = 0;
-            if (is_int($response) || (is_string($response) && is_numeric($response))) {
-                $messageId = (int) $response;
-            } elseif (is_array($response) && isset($response['message_id'])) {
-                $messageId = (int) $response['message_id'];
+            if (! is_array($row)) {
+                throw new VKClientException('execute не вернул отчёт по каждой заявке');
             }
 
-            $error = null;
-            $code = 0;
-            if ($messageId <= 1) {
-                $executeError = $errors[$errorIndex] ?? null;
-                if (is_array($executeError)) {
-                    $errorIndex++;
-                    $error = (string) ($executeError['error_msg'] ?? '');
-                    $code = (int) ($executeError['error_code'] ?? 0);
-                }
+            $messageId = $row['message_id'] ?? null;
+            if (is_string($messageId) && is_numeric($messageId)) {
+                $messageId = (int) $messageId;
+            }
+            if (! is_int($messageId) || $messageId <= 0) {
+                $messageId = null;
+            }
+
+            $error = $row['error'] ?? null;
+            if ($error === false || $error === null) {
+                $error = null;
+            } elseif (is_scalar($error)) {
+                $error = trim((string) $error);
+                $error = $error === '' ? null : $error;
+            } else {
+                $error = json_encode($error, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: null;
             }
 
             $results[] = [
-                'user_id' => (int) $item['user_id'],
+                'user_id' => (int) ($row['user_id'] ?? $item['user_id']),
                 'message_id' => $messageId,
                 'error' => $error,
-                'error_code' => $code,
             ];
         }
 
@@ -922,9 +943,7 @@ VKSCRIPT;
         return groupIds;
         VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
 
     }
 
@@ -1091,9 +1110,7 @@ VKSCRIPT;
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 
     /**
@@ -1123,8 +1140,6 @@ VKSCRIPT;
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 }

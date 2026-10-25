@@ -34,7 +34,7 @@
 - Вызывает `stories.save`.
 - Возвращает результат (содержит `count`).
 
-HTTP-клиент SDK собирается с `http_errors = false` и `VkApiResponseGuard`: ответ не 200 и ошибка без строкового `error_msg` пишутся в канал `vk` (код и тело без токена). Пустой `error_msg` заменяется на пустую строку, чтобы SDK вернул `VKApiUnknownException` с кодом 1, а не `TypeError`. Повторы кода 1 и HTTP 405 делает `VkStoryPoster`, не этот метод.
+HTTP-клиент SDK собирается с `http_errors = false` и `VkApiResponseGuard`: ответ не 200 и ошибка без строкового `error_msg` пишутся в канал `vk` (код и тело без токена). Пустой `error_msg` заменяется на пустую строку, чтобы SDK вернул `VKApiUnknownException` с кодом 1, а не `TypeError`. Ответ `Captcha needed` (код 14) пишется отдельной строкой: метод, `captcha_sid`, картинка и адрес страницы капчи без параметров. Тело для SDK сохраняет `captcha_sid`, картинку и `redirect_uri`, чтобы исключение осталось `VKApiCaptchaException`. Если текста ошибки нет, подставляется `Captcha needed`. Повторы кода 1 и HTTP 405 делает `VkStoryPoster`, не этот метод.
 
 #### createReposts(int $userId, string $postId, array $groupIds): array
 
@@ -95,13 +95,9 @@ HTTP-клиент SDK собирается с `http_errors = false` и `VkApiRes
 
 Личное сообщение (`messages.send`), опционально с attachment вида `photo{owner}_{media}`.
 
-#### findUsersWithOutgoingMessages(array $userIds): array
+#### sendWelcomeBatch(array $messages): array
 
-До 25 `messages.getHistory` одним `execute`. Возвращает id пользователей, у которых в истории есть исходящее сообщение.
-
-#### sendDirectMessages(array $messages): array
-
-До 25 `messages.send` одним `execute`, вызов тот же, что в `createReposts`. Ответ — список `{user_id, message_id, error, error_code}`. Клиент SDK возвращает только `response`: успешный вызов — номер сообщения, неуспешный — `false`.
+Не больше `VkApiService::WELCOME_BATCH_LIMIT` (сейчас 7, потолок 12) приветствий одним `execute`. Вызов тот же, что у `createReposts`: POST-тело, не адрес. Потолок 12 — это `floor(25 / 2)`: на заявку уходит `messages.getHistory` и `messages.send`, внутри `execute` не больше 25 вызовов. Скрипт для каждой заявки смотрит `messages.getHistory`: если `count > 0`, письмо не шлёт. Иначе вызывает `messages.send`. Ответ — список `{user_id, message_id, error}` той же длины, что и переданный в скрипт вход (лишнее обрезается). Наружу возвращается поле `response`.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
 

@@ -29,9 +29,9 @@ class FakeVkApiService extends VkApiService
     public ?\Throwable $wallPostExistsException = null;
 
     /**
-     * Если задано, sendDirectMessages возвращает эти результаты вместо успеха.
+     * Если задано, sendWelcomeBatch возвращает эти отчёты вместо успеха.
      *
-     * @var list<array{user_id:int, message_id?:int, error?:string|null, error_code?:int}>|null
+     * @var list<array{user_id:int, message_id?:int|null, error?:string|null, error_code?:int}>|null
      */
     public ?array $welcomeSendResults = null;
 
@@ -139,53 +139,54 @@ class FakeVkApiService extends VkApiService
     }
 
     /**
-     * @param  list<int>  $userIds
-     * @return list<int>
-     */
-    public function findUsersWithOutgoingMessages(array $userIds): array
-    {
-        $ids = array_values(array_map(intval(...), $userIds));
-        $this->calls[] = ['method' => 'findUsersWithOutgoingMessages', 'user_ids' => $ids];
-        $this->maybeFail('findUsersWithOutgoingMessages');
-
-        if (! $this->hasOutgoingMessage) {
-            return [];
-        }
-
-        return $ids;
-    }
-
-    /**
      * @param  list<array{user_id:int, message:string, attachment?:string|null}>  $messages
-     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     * @return list<array{user_id:int, message_id:?int, error:?string}>
      */
-    public function sendDirectMessages(array $messages): array
+    public function sendWelcomeBatch(array $messages): array
     {
+        $this->calls[] = ['method' => 'sendWelcomeBatch', 'count' => count($messages)];
+        $this->maybeFail('sendWelcomeBatch');
+
         if ($this->welcomeSendResults !== null) {
             foreach ($messages as $message) {
+                $attachment = $message['attachment'] ?? null;
                 $this->calls[] = [
                     'method' => 'sendDirectMessage',
                     'user_id' => (int) $message['user_id'],
                     'message' => (string) $message['message'],
-                    'attachment' => $message['attachment'] ?? null,
+                    'attachment' => is_string($attachment) && $attachment !== '' ? $attachment : null,
                 ];
             }
 
-            return array_map(fn (array $result): array => [
-                'user_id' => (int) $result['user_id'],
-                'message_id' => (int) ($result['message_id'] ?? 0),
-                'error' => isset($result['error']) ? (string) $result['error'] : null,
-                'error_code' => (int) ($result['error_code'] ?? 0),
-            ], $this->welcomeSendResults);
+            return array_map(function (array $result): array {
+                $messageId = (int) ($result['message_id'] ?? 0);
+
+                return [
+                    'user_id' => (int) $result['user_id'],
+                    'message_id' => $messageId > 1 ? $messageId : null,
+                    'error' => isset($result['error']) && $result['error'] !== '' ? (string) $result['error'] : null,
+                ];
+            }, $this->welcomeSendResults);
         }
 
         $results = [];
         foreach ($messages as $message) {
+            if ($this->hasOutgoingMessage) {
+                $results[] = [
+                    'user_id' => (int) $message['user_id'],
+                    'message_id' => null,
+                    'error' => VkApiService::ALREADY_WROTE_ERROR,
+                ];
+
+                continue;
+            }
+
+            $attachment = $message['attachment'] ?? null;
             $this->calls[] = [
                 'method' => 'sendDirectMessage',
                 'user_id' => (int) $message['user_id'],
                 'message' => (string) $message['message'],
-                'attachment' => $message['attachment'] ?? null,
+                'attachment' => is_string($attachment) && $attachment !== '' ? $attachment : null,
             ];
             try {
                 $this->maybeFail('sendDirectMessage');
@@ -193,14 +194,12 @@ class FakeVkApiService extends VkApiService
                     'user_id' => (int) $message['user_id'],
                     'message_id' => fake()->unique()->numberBetween(2, 1_000_000),
                     'error' => null,
-                    'error_code' => 0,
                 ];
             } catch (\Throwable $e) {
                 $results[] = [
                     'user_id' => (int) $message['user_id'],
-                    'message_id' => 0,
+                    'message_id' => null,
                     'error' => $e->getMessage(),
-                    'error_code' => $e instanceof VKApiException ? $e->getErrorCode() : 0,
                 ];
             }
         }

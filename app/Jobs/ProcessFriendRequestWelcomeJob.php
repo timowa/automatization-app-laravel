@@ -29,8 +29,6 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
     use Queueable;
     use SerializesModels;
 
-    public const BATCH_LIMIT = VkApiService::WELCOME_BATCH_LIMIT;
-
     public int $tries = 1;
 
     public int $uniqueFor = 240;
@@ -65,23 +63,41 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             ->orderBy('id')
             ->get();
 
-        /** @var array<int, list<AgentVkFriendRequest>> $byAgent */
-        $byAgent = [];
+        $own = [];
+        $agentId = null;
+        $skippedIds = [];
         foreach ($requests as $request) {
-            if (! $request instanceof AgentVkFriendRequest || ! $this->prepareRequest($request)) {
+            if (! $request instanceof AgentVkFriendRequest) {
                 continue;
             }
-            $byAgent[(int) $request->agent_id][] = $request;
+
+            if ($agentId === null) {
+                $agentId = (int) $request->agent_id;
+            }
+
+            if ((int) $request->agent_id !== $agentId) {
+                $skippedIds[] = (int) $request->id;
+
+                continue;
+            }
+
+            if ($this->prepareRequest($request)) {
+                $own[] = $request;
+            }
         }
 
-        $agentIndex = 0;
-        foreach ($byAgent as $agentRequests) {
-            if ($agentIndex > 0) {
-                usleep(350_000);
-            }
-            $agentIndex++;
-            $this->processAgent($vkApi, $agentRequests);
+        if ($skippedIds !== []) {
+            Log::channel('job')->warning('Автоприветствие: в задаче заявки разных агентов, обработан только первый', [
+                'agent_id' => $agentId,
+                'skipped_friend_request_ids' => $skippedIds,
+            ]);
         }
+
+        if ($own === []) {
+            return;
+        }
+
+        $this->processAgent($vkApi, $own);
     }
 
     private function prepareRequest(AgentVkFriendRequest $request): bool
@@ -143,69 +159,60 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
 
         $vkApi->setToken($vkUser->getToken());
 
-        try {
-            $outgoing = $vkApi->findUsersWithOutgoingMessages(array_map(
-                fn (AgentVkFriendRequest $request): int => (int) $request->user_id,
-                $requests,
-            ));
-        } catch (\Throwable $e) {
-            $this->failBatch($requests, $e);
-
-            return;
-        }
-
-        $pending = [];
+        $ready = [];
         foreach ($requests as $request) {
-            if (in_array((int) $request->user_id, $outgoing, true)) {
-                $this->markAlreadyMessaged($request);
-
+            $message = $this->messageFor($request, $vkUser);
+            if ($message === null) {
                 continue;
             }
-            $pending[] = $request;
+            $ready[] = [
+                'request' => $request,
+                'message' => $message,
+            ];
         }
 
-        if ($pending === []) {
+        if ($ready === []) {
             return;
         }
 
-        usleep(350_000);
+        $this->sendPrepared($vkApi, $ready);
+    }
 
-        $messages = [];
-        $byUserId = [];
-        foreach ($pending as $request) {
-            $built = $this->messageFor($request, $vkUser);
-            if ($built === null) {
-                continue;
-            }
-            $messages[] = $built;
-            $byUserId[(int) $request->user_id] = $request;
-        }
-
-        if ($messages === []) {
-            return;
+    /**
+     * @param  list<array{request:AgentVkFriendRequest, message:array{user_id:int, message:string, attachment:?string}}>  $ready
+     */
+    private function sendPrepared(VkApiService $vkApi, array $ready): void
+    {
+        $requests = [];
+        $payload = [];
+        foreach ($ready as $row) {
+            $requests[] = $row['request'];
+            $payload[] = $row['message'];
         }
 
         try {
-            $results = $vkApi->sendDirectMessages($messages);
+            $reports = $vkApi->sendWelcomeBatch($payload);
         } catch (\Throwable $e) {
-            $this->failBatch(array_values($byUserId), $e);
+            $this->logExecuteFailure($requests, $e);
 
             return;
         }
 
-        foreach ($results as $result) {
-            $request = $byUserId[(int) $result['user_id']] ?? null;
-            if ($request === null) {
+        foreach ($requests as $index => $request) {
+            $report = $reports[$index] ?? null;
+            if (! is_array($report)) {
+                $this->logExecuteFailure([$request], new \RuntimeException('execute не вернул отчёт по заявке'));
+
                 continue;
             }
-            $this->applySendResult($request, $result);
+            $this->applyReport($request, $report);
         }
     }
 
     /**
      * @param  list<AgentVkFriendRequest>  $requests
      */
-    private function failBatch(array $requests, \Throwable $e): void
+    private function logExecuteFailure(array $requests, \Throwable $e): void
     {
         if (count($requests) === 1) {
             $this->handleFailure($requests[0], $e);
@@ -213,14 +220,15 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
+        $ids = array_map(fn (AgentVkFriendRequest $request): int => (int) $request->id, $requests);
+        Log::channel('job')->warning('Ошибка автоприветствия: нет отчёта по заявкам', [
             'agent_id' => $requests[0]->agent_id,
-            'count' => count($requests),
+            'friend_request_ids' => $ids,
         ]);
         Log::channel('vk')->error($e->getMessage(), [
             'agent_id' => $requests[0]->agent_id,
+            'friend_request_ids' => $ids,
             'context' => 'friend_request_welcome',
-            'count' => count($requests),
         ]);
     }
 
@@ -229,10 +237,11 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
         $request->message_id = AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL;
         $request->save();
 
-        Log::channel('job')->info('Автоприветствие пропущено: агент уже писал пользователю', [
+        Log::channel('job')->warning('Автоприветствие не отправлено', [
+            'friend_request_id' => $request->id,
             'agent_id' => $request->agent_id,
             'user_id' => $request->user_id,
-            'message_id' => AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL,
+            'reason' => VkApiService::ALREADY_WROTE_ERROR,
         ]);
     }
 
@@ -276,12 +285,25 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @param  array{user_id:int, message_id:int, error:?string, error_code:int}  $result
+     * @param  array{user_id:int, message_id:?int, error:?string}  $report
      */
-    private function applySendResult(AgentVkFriendRequest $request, array $result): void
+    private function applyReport(AgentVkFriendRequest $request, array $report): void
     {
-        $messageId = (int) $result['message_id'];
-        if ($messageId > AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL) {
+        if ((int) ($report['user_id'] ?? 0) !== (int) $request->user_id) {
+            $this->logExecuteFailure([$request], new \RuntimeException('execute вернул отчёт по другому пользователю'));
+
+            return;
+        }
+
+        $error = $report['error'] ?? null;
+        if ($error === VkApiService::ALREADY_WROTE_ERROR) {
+            $this->markAlreadyMessaged($request);
+
+            return;
+        }
+
+        $messageId = $report['message_id'] ?? null;
+        if (is_int($messageId) && $messageId > AgentVkFriendRequest::AGENT_ALREADY_MESSAGED_SENTINEL) {
             $updated = DB::table('agent_vk_friend_requests')
                 ->where('id', $request->id)
                 ->whereNull('message_id')
@@ -292,6 +314,7 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
 
             if ($updated === 0) {
                 Log::channel('job')->warning('Автоприветствие: запись уже обработана другим процессом', [
+                    'friend_request_id' => $request->id,
                     'agent_id' => $request->agent_id,
                     'user_id' => $request->user_id,
                 ]);
@@ -300,6 +323,7 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             }
 
             Log::channel('job')->info('Автоприветствие на заявку в друзья отправлено', [
+                'friend_request_id' => $request->id,
                 'agent_id' => $request->agent_id,
                 'user_id' => $request->user_id,
                 'message_id' => $messageId,
@@ -308,29 +332,30 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $error = $result['error'];
-        if ($error === null || $error === '') {
-            Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
-                'agent_id' => $request->agent_id,
-                'user_id' => $request->user_id,
-            ]);
-            Log::channel('vk')->error('ВКонтакте не вернул номер сообщения', [
-                'agent_id' => $request->agent_id,
-                'user_id' => $request->user_id,
-                'context' => 'friend_request_welcome',
-            ]);
+        if (is_string($error) && $error !== '') {
+            $this->handleFailure($request, new VKApiException(
+                0,
+                $error,
+                new VKApiError([
+                    'error_code' => 0,
+                    'error_msg' => $error,
+                ]),
+            ));
 
             return;
         }
 
-        $this->handleFailure($request, new VKApiException(
-            (int) $result['error_code'],
-            $error,
-            new VKApiError([
-                'error_code' => (int) $result['error_code'],
-                'error_msg' => $error,
-            ]),
-        ));
+        Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
+            'friend_request_id' => $request->id,
+            'agent_id' => $request->agent_id,
+            'user_id' => $request->user_id,
+        ]);
+        Log::channel('vk')->error('ВКонтакте не вернул номер сообщения', [
+            'friend_request_id' => $request->id,
+            'agent_id' => $request->agent_id,
+            'user_id' => $request->user_id,
+            'context' => 'friend_request_welcome',
+        ]);
     }
 
     private function handleFailure(AgentVkFriendRequest $request, \Throwable $e): void
@@ -345,10 +370,12 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
                 ]);
 
             Log::channel('job')->warning('Автоприветствие не отправлено: постоянный отказ ВКонтакте', [
+                'friend_request_id' => $request->id,
                 'agent_id' => $request->agent_id,
                 'user_id' => $request->user_id,
             ]);
             Log::channel('vk')->error($e->getMessage(), [
+                'friend_request_id' => $request->id,
                 'agent_id' => $request->agent_id,
                 'user_id' => $request->user_id,
                 'context' => 'friend_request_welcome',
@@ -359,10 +386,12 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
         }
 
         Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
+            'friend_request_id' => $request->id,
             'agent_id' => $request->agent_id,
             'user_id' => $request->user_id,
         ]);
         Log::channel('vk')->error($e->getMessage(), [
+            'friend_request_id' => $request->id,
             'agent_id' => $request->agent_id,
             'user_id' => $request->user_id,
             'context' => 'friend_request_welcome',
