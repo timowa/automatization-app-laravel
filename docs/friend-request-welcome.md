@@ -2,7 +2,7 @@
 
 ## Назначение
 
-Для агента с включённой настройкой система периодически забирает входящие заявки в друзья из ВКонтакте и по одной отправляет приветственное личное сообщение (текст + опционально визитка). Заявку в друзья приложение **не принимает** (`friends.add` не вызывается).
+Для агента с включённой настройкой система периодически забирает входящие заявки в друзья из ВКонтакте и отправляет приветственное личное сообщение (текст + опционально визитка). За один запуск берётся до 25 заявок; сообщения одного агента уходят одним вызовом `execute`. Заявку в друзья приложение **не принимает** (`friends.add` не вызывается).
 
 ## Поток
 
@@ -19,7 +19,7 @@ friends.getRequests → upsert в agent_vk_friend_requests
     ↓
 vk:process-friend-request-welcome
     ↓
-одна запись с message_id IS NULL и welcome_permanently_failed = false → ProcessFriendRequestWelcomeJob
+до 25 записей с message_id IS NULL и welcome_permanently_failed = false → ProcessFriendRequestWelcomeJob
     ↓
 messages.send (текст + attachment photo{vk_user_id}_{media_id})
     ↓
@@ -100,7 +100,7 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 | Команда | Расписание | Назначение |
 |---|---|---|
 | `vk:sync-friend-requests` | `0 0,6,12,18 * * *` | Диспатч sync-job по агентам с включённым флагом |
-| `vk:process-friend-request-welcome` | `everyFiveMinutes()` | Берёт самую старую заявку с `message_id IS NULL` и `welcome_permanently_failed = false` (`lockForUpdate`) и ставит welcome-job |
+| `vk:process-friend-request-welcome` | `everyFiveMinutes()` | Берёт до 25 самых старых заявок с `message_id IS NULL` и `welcome_permanently_failed = false` (`lockForUpdate`) и ставит один welcome-job |
 
 Файлы: `app/Console/Commands/SyncFriendRequestsCommand.php`, `ProcessFriendRequestWelcomeCommand.php`; регистрация в `routes/console.php`.
 
@@ -119,13 +119,15 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 
 **Файл:** `app/Jobs/ProcessFriendRequestWelcomeJob.php`
 
-- `ShouldBeUnique` по `friend_request_id` (`uniqueFor = 240`).
+- `ShouldBeUnique` по списку id заявок (`uniqueFor = 240`).
 - Пропуски: уже есть `message_id`, выключена настройка, нет токена.
-- Текст: `FriendRequestWelcomeText::resolve()`.
+- Заявки группируются по агенту. Для агента один `execute` проверяет исходящие (`messages.getHistory`, до 25), второй отправляет письма (`messages.send`, до 25).
+- Текст: `FriendRequestWelcomeText::resolveTemplate()`.
 - Attachment: `FriendRequestWelcomeText::photoAttachment(ownerId, mediaId)` при наличии визитки.
-- `sendDirectMessage` → атомарный `UPDATE … WHERE message_id IS NULL`.
-- Постоянный отказ `VkApiErrorInspector::isPermanentDirectMessageRefusal()` ставит `welcome_permanently_failed = true` и не пишет `message_id`. Временный сбой оставляет заявку в очереди.
-- Rate limit: `usleep(350_000)` перед отправкой.
+- Успех → атомарный `UPDATE … WHERE message_id IS NULL`.
+- Постоянный отказ конкретного пользователя (`VkApiErrorInspector::isPermanentDirectMessageRefusal()`) ставит `welcome_permanently_failed = true` только у этой заявки и не пишет `message_id`. Отказ одного человека не закрывает остальные заявки агента. Временный сбой оставляет заявку в очереди.
+- Если `execute` падает целиком на пачке из нескольких заявок, флаг постоянного отказа не ставится: пачка остаётся в очереди.
+- Rate limit: `usleep(350_000)` между проверкой истории и отправкой и между агентами.
 
 ## VkApiService (новые методы)
 
@@ -133,8 +135,10 @@ messages.send (текст + attachment photo{vk_user_id}_{media_id})
 |---|---|
 | `getFriendRequests()` | `friends.getRequests` (extended) |
 | `hasOutgoingMessageWithUser(int $userId)` | `messages.getHistory` |
+| `findUsersWithOutgoingMessages(list<int> $userIds)` | `execute` + `messages.getHistory`, до 25 |
+| `sendDirectMessages(list<array> $messages)` | `execute` + `messages.send`, до 25; вызов как в `createReposts`. Неуспешный вызов в списке — `false` |
 | `uploadMessagesPhoto(string $absolutePath)` | upload server + `photos.saveMessagesPhoto`, возвращает `media_id` |
-| `sendDirectMessage(int $userId, string $message, ?string $attachment)` | `messages.send` |
+| `sendDirectMessage(int $userId, string $message, ?string $attachment)` | `messages.send` (одиночный вызов, пакет идёт через `sendDirectMessages`) |
 
 Аналоги есть в `FakeVkApiService` для тестов.
 

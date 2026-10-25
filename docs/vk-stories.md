@@ -61,7 +61,7 @@ VkStoryPoster::post → vkApi->storiesPost(postId, imagePath)
 
 Вызывающий Job ответственен за удаление временного файла после загрузки.
 
-Если ссылку на фото скачать нельзя, `generate()` бросает `StoryPublicationSkippedException`. Для повторной истории `PublishLoopStoriesCommand` в этом случае выключает цикл (`is_active = false`) и не сдвигает `last_published_at`. Пустой URL фото по-прежнему только пропускает текущий запуск.
+Если ссылку на фото скачать нельзя, `generate()` бросает `StoryPublicationSkippedException`. Для повторной истории `PublishLoopStoriesCommand` в этом случае выключает цикл (`is_active = false`) и не сдвигает `last_published_at`. Пустой URL фото по-прежнему только пропускает текущий запуск. Если поста в базе нет, `wall.getById` не нашёл пост или проверка поста завершилась ошибкой, цикл тоже выключается.
 
 `VkStoryPoster` повторяет публикацию при коде 1 и HTTP 405 (до 3 раз). После этого задача истории становится `failed`.
 

@@ -32,6 +32,8 @@ class VkApiService
 
     public const HTTP_TIMEOUT_SECONDS = 30;
 
+    public const WELCOME_BATCH_LIMIT = 25;
+
     public const FRIEND_FIELDS = [
         'bdate',
         'city',
@@ -565,6 +567,202 @@ VKSCRIPT;
         }
 
         return false;
+    }
+
+    /**
+     * До 25 пользователей одним execute: у кого уже есть исходящее сообщение.
+     *
+     * @param  list<int>  $userIds
+     * @return list<int>
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    public function findUsersWithOutgoingMessages(array $userIds): array
+    {
+        $peers = [];
+        foreach ($userIds as $userId) {
+            $userId = (int) $userId;
+            if ($userId > 0) {
+                $peers[$userId] = $userId;
+            }
+        }
+        $peers = array_slice(array_values($peers), 0, self::WELCOME_BATCH_LIMIT);
+        if ($peers === []) {
+            return [];
+        }
+
+        $rows = $this->client->getRequest()->post('execute', $this->token, [
+            'code' => self::outgoingHistoryExecuteCode($peers),
+        ]);
+        if (! is_array($rows)) {
+            return [];
+        }
+
+        return self::userIdsWithOutgoingMessages($peers, $rows);
+    }
+
+    /**
+     * До 25 вызовов messages.getHistory без условий: в VKScript if принимает только boolean.
+     *
+     * @param  list<int>  $userIds
+     */
+    public static function outgoingHistoryExecuteCode(array $userIds): string
+    {
+        $calls = [];
+        foreach ($userIds as $userId) {
+            $calls[] = 'API.messages.getHistory({"user_id":'.(int) $userId.',"count":20})';
+        }
+
+        return 'return ['.implode(',', $calls).'];';
+    }
+
+    /**
+     * @param  list<int>  $userIds
+     * @param  list<mixed>  $rows
+     * @return list<int>
+     */
+    public static function userIdsWithOutgoingMessages(array $userIds, array $rows): array
+    {
+        $outgoing = [];
+        foreach (array_values($userIds) as $index => $userId) {
+            $row = $rows[$index] ?? null;
+            if (! is_array($row) || ! is_array($row['items'] ?? null)) {
+                continue;
+            }
+
+            foreach ($row['items'] as $item) {
+                if (is_array($item) && (int) ($item['out'] ?? 0) === 1) {
+                    $outgoing[] = (int) $userId;
+                    break;
+                }
+            }
+        }
+
+        return array_values(array_filter($outgoing, fn (int $id): bool => $id > 0));
+    }
+
+    /**
+     * До 25 личных сообщений одним execute. Отказ одного пользователя не отменяет остальных.
+     *
+     * @param  list<array{user_id:int, message:string, attachment?:string|null}>  $messages
+     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     * @throws \JsonException
+     */
+    public function sendDirectMessages(array $messages): array
+    {
+        $payload = [];
+        foreach (array_slice($messages, 0, self::WELCOME_BATCH_LIMIT) as $message) {
+            $item = [
+                'user_id' => (int) $message['user_id'],
+                'message' => (string) $message['message'],
+                'random_id' => random_int(1, 2_147_483_647),
+            ];
+            $attachment = $message['attachment'] ?? null;
+            if (is_string($attachment) && $attachment !== '') {
+                $item['attachment'] = $attachment;
+            }
+            if ($item['user_id'] > 0 && $item['message'] !== '') {
+                $payload[] = $item;
+            }
+        }
+        if ($payload === []) {
+            return [];
+        }
+
+        $rows = $this->client->getRequest()->post('execute', $this->token, [
+            'code' => self::directMessagesExecuteCode($payload),
+        ]);
+
+        return self::mapDirectMessageResults($payload, [
+            'response' => $rows,
+        ]);
+    }
+
+    /**
+     * До 25 вызовов messages.send. Вложение добавляется в PHP, чтобы в VKScript не было if по строке.
+     *
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment?:string}>  $payload
+     */
+    public static function directMessagesExecuteCode(array $payload): string
+    {
+        $calls = [];
+        foreach ($payload as $item) {
+            $params = [
+                'peer_id' => (int) $item['user_id'],
+                'message' => (string) $item['message'],
+                'random_id' => (int) $item['random_id'],
+                'dont_parse_links' => 1,
+            ];
+            $attachment = $item['attachment'] ?? null;
+            if (is_string($attachment) && $attachment !== '') {
+                $params['attachment'] = $attachment;
+            }
+            $calls[] = 'API.messages.send('.json_encode(
+                $params,
+                JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+            ).')';
+        }
+
+        return 'return ['.implode(',', $calls).'];';
+    }
+
+    /**
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment?:string}>  $payload
+     * @param  array<string, mixed>  $body
+     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     *
+     * @throws VKClientException
+     */
+    public static function mapDirectMessageResults(array $payload, array $body): array
+    {
+        $rows = $body['response'] ?? null;
+        if (! is_array($rows) || ! array_is_list($rows)) {
+            throw new VKClientException('execute не вернул список сообщений');
+        }
+
+        $errors = [];
+        foreach (is_array($body['execute_errors'] ?? null) ? $body['execute_errors'] : [] as $error) {
+            if (is_array($error)) {
+                $errors[] = $error;
+            }
+        }
+
+        $errorIndex = 0;
+        $results = [];
+        foreach ($payload as $index => $item) {
+            $row = $rows[$index] ?? null;
+            $response = is_array($row) ? ($row['response'] ?? null) : $row;
+            $messageId = 0;
+            if (is_int($response) || (is_string($response) && is_numeric($response))) {
+                $messageId = (int) $response;
+            } elseif (is_array($response) && isset($response['message_id'])) {
+                $messageId = (int) $response['message_id'];
+            }
+
+            $error = null;
+            $code = 0;
+            if ($messageId <= 1) {
+                $executeError = $errors[$errorIndex] ?? null;
+                if (is_array($executeError)) {
+                    $errorIndex++;
+                    $error = (string) ($executeError['error_msg'] ?? '');
+                    $code = (int) ($executeError['error_code'] ?? 0);
+                }
+            }
+
+            $results[] = [
+                'user_id' => (int) $item['user_id'],
+                'message_id' => $messageId,
+                'error' => $error,
+                'error_code' => $code,
+            ];
+        }
+
+        return $results;
     }
 
     /**

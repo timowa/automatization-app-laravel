@@ -8,7 +8,7 @@ const CHANNELS = [
   ['vk', 'vk/posts/error-{date}.log'],
   ['vk-images', 'vk/images/error-{date}.log'],
   ['vk-sync', 'vk/sync/error-{date}.log'],
-  ['vkRepost', 'vk/reposts/error-{date}.log'],
+  ['vk-reposts', 'vk/reposts/error-{date}.log'],
 ];
 
 const LINE = /^\[([^\]]+)\] \w+\.(INFO|WARNING|ERROR): (.*)$/;

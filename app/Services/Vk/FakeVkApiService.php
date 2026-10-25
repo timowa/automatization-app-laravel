@@ -26,6 +26,15 @@ class FakeVkApiService extends VkApiService
 
     public bool $wallPostExistsResult = true;
 
+    public ?\Throwable $wallPostExistsException = null;
+
+    /**
+     * Если задано, sendDirectMessages возвращает эти результаты вместо успеха.
+     *
+     * @var list<array{user_id:int, message_id?:int, error?:string|null, error_code?:int}>|null
+     */
+    public ?array $welcomeSendResults = null;
+
     public bool $noRepostRights = false;
 
     public array $friendsResponse = [];
@@ -122,7 +131,81 @@ class FakeVkApiService extends VkApiService
     {
         $this->calls[] = ['method' => 'wallPostExists', 'post_id' => $fullId];
 
+        if ($this->wallPostExistsException !== null) {
+            throw $this->wallPostExistsException;
+        }
+
         return $this->wallPostExistsResult;
+    }
+
+    /**
+     * @param  list<int>  $userIds
+     * @return list<int>
+     */
+    public function findUsersWithOutgoingMessages(array $userIds): array
+    {
+        $ids = array_values(array_map(intval(...), $userIds));
+        $this->calls[] = ['method' => 'findUsersWithOutgoingMessages', 'user_ids' => $ids];
+        $this->maybeFail('findUsersWithOutgoingMessages');
+
+        if (! $this->hasOutgoingMessage) {
+            return [];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<array{user_id:int, message:string, attachment?:string|null}>  $messages
+     * @return list<array{user_id:int, message_id:int, error:?string, error_code:int}>
+     */
+    public function sendDirectMessages(array $messages): array
+    {
+        if ($this->welcomeSendResults !== null) {
+            foreach ($messages as $message) {
+                $this->calls[] = [
+                    'method' => 'sendDirectMessage',
+                    'user_id' => (int) $message['user_id'],
+                    'message' => (string) $message['message'],
+                    'attachment' => $message['attachment'] ?? null,
+                ];
+            }
+
+            return array_map(fn (array $result): array => [
+                'user_id' => (int) $result['user_id'],
+                'message_id' => (int) ($result['message_id'] ?? 0),
+                'error' => isset($result['error']) ? (string) $result['error'] : null,
+                'error_code' => (int) ($result['error_code'] ?? 0),
+            ], $this->welcomeSendResults);
+        }
+
+        $results = [];
+        foreach ($messages as $message) {
+            $this->calls[] = [
+                'method' => 'sendDirectMessage',
+                'user_id' => (int) $message['user_id'],
+                'message' => (string) $message['message'],
+                'attachment' => $message['attachment'] ?? null,
+            ];
+            try {
+                $this->maybeFail('sendDirectMessage');
+                $results[] = [
+                    'user_id' => (int) $message['user_id'],
+                    'message_id' => fake()->unique()->numberBetween(2, 1_000_000),
+                    'error' => null,
+                    'error_code' => 0,
+                ];
+            } catch (\Throwable $e) {
+                $results[] = [
+                    'user_id' => (int) $message['user_id'],
+                    'message_id' => 0,
+                    'error' => $e->getMessage(),
+                    'error_code' => $e instanceof VKApiException ? $e->getErrorCode() : 0,
+                ];
+            }
+        }
+
+        return $results;
     }
 
     public function createReposts(int $userId, string $postId, array $groupIds): array

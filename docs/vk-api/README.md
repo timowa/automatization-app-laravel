@@ -16,7 +16,7 @@
 | [photos.md](photos.md) | Photos | photos.getWallUploadServer, photos.saveWallPhoto | CreateVkPostJob, CreateVkProductJob |
 | [market.md](market.md) | Market | market.add, market.edit, market.delete | CreateVkProductJob, EditVkProductJob, ArchiveVkProductJob |
 | [groups.md](groups.md) | Groups | groups.get | CreateVkRepostJob |
-| [execute.md](execute.md) | Execute | execute (VKScript) | CreateVkRepostJob, ArchiveVkProductJob |
+| [execute.md](execute.md) | Execute | execute (VKScript) | CreateVkRepostJob, ArchiveVkProductJob, ProcessFriendRequestWelcomeJob |
 
 ## Связь методов с Jobs
 

@@ -203,4 +203,70 @@ class PublishLoopStoriesCommandTest extends TestCase
         $this->assertNull($story->last_published_at);
         $this->assertEmpty(array_filter($vkApi->calls, fn (array $call): bool => $call['method'] === 'storiesPost'));
     }
+
+    public function test_command_stops_loop_when_wall_post_is_missing(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        VkWallPost::factory()->forOffer($offer->id)->create();
+        $story = VkLoopStory::factory()->create([
+            'offer_id' => $offer->id,
+            'is_active' => true,
+            'last_published_at' => null,
+        ]);
+
+        $vkApi = new FakeVkApiService;
+        $vkApi->wallPostExistsResult = false;
+        $this->app->instance(VkApiService::class, $vkApi);
+
+        $this->artisan('vk:publish-loop-stories')->assertSuccessful();
+
+        $story = $story->fresh();
+        $this->assertFalse($story->is_active);
+        $this->assertNull($story->last_published_at);
+        $this->assertEmpty(array_filter($vkApi->calls, fn (array $call): bool => $call['method'] === 'storiesPost'));
+    }
+
+    public function test_command_stops_loop_when_wall_post_check_fails(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        VkWallPost::factory()->forOffer($offer->id)->create();
+        $story = VkLoopStory::factory()->create([
+            'offer_id' => $offer->id,
+            'is_active' => true,
+            'last_published_at' => null,
+        ]);
+
+        $vkApi = new FakeVkApiService;
+        $vkApi->wallPostExistsException = new \RuntimeException('wall.getById failed');
+        $this->app->instance(VkApiService::class, $vkApi);
+
+        $this->artisan('vk:publish-loop-stories')->assertSuccessful();
+
+        $story = $story->fresh();
+        $this->assertFalse($story->is_active);
+        $this->assertNull($story->last_published_at);
+    }
+
+    public function test_command_stops_loop_when_local_post_is_missing(): void
+    {
+        $offer = Offer::factory()->create();
+        VkUser::factory()->create(['agent_id' => $offer->agent_id]);
+        $story = VkLoopStory::factory()->create([
+            'offer_id' => $offer->id,
+            'is_active' => true,
+            'last_published_at' => null,
+        ]);
+
+        $vkApi = new FakeVkApiService;
+        $this->app->instance(VkApiService::class, $vkApi);
+
+        $this->artisan('vk:publish-loop-stories')->assertSuccessful();
+
+        $story = $story->fresh();
+        $this->assertFalse($story->is_active);
+        $this->assertNull($story->last_published_at);
+        $this->assertEmpty($vkApi->calls);
+    }
 }

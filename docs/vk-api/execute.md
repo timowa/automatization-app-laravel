@@ -1,7 +1,7 @@
 # Execute API Method
 
 Документация метода execute VK API.
-Используется в: CreateVkRepostJob (пакетный репост в группы), ArchiveVkProductJob (пакетное удаление товаров).
+Используется в: CreateVkRepostJob (пакетный репост в группы), ArchiveVkProductJob (пакетное удаление товаров), ProcessFriendRequestWelcomeJob (до 25 проверок истории и до 25 личных сообщений одного агента).
 
 Источник: https://dev.vk.com/ru/method/execute
 
@@ -35,12 +35,22 @@
 
 ## VKScript
 
-VKScript — строго типизированное подмножество TypeScript. Поддерживает:
-- базовые операции
-- циклы
-- условия
-- работу с массивами
-- вызовы API-методов через `API.<method>(<params>)`
+Единственное официальное описание языка — страница метода [execute](https://dev.vk.com/ru/method/execute) и её архив: [vk.com/dev/execute](https://web.archive.org/web/20150429005235/http://vk.com/dev/execute). Это не TypeScript и не JavaScript: объектов по ссылке нет, функций объявлять нельзя, `undefined` нет.
+
+Поддерживается:
+
+- арифметика, конкатенация строк через `+`, `parseInt` и `parseDouble`;
+- массивы и объекты (`[1, 2]`, `{key: "value"}`), `.length`, `push`, `pop`, `shift`, `unshift`, `slice`, `splice`, `substr`, `split`, `indexOf`, `delete`;
+- `while`, `if` / `else`;
+- сравнения `<`, `>`, `<=`, `>=`, `==`, `!=` — только два числа, две строки или строка и число;
+- логические `&&` и `||`, но оба операнда уже должны быть boolean;
+- вызов `API.section.method({...})`, не больше 25 вызовов на один `execute`;
+- оператор `@.` для поля массива объектов;
+- код заканчивается `return`. Операторы разделяются `;`.
+
+В условие `if` и `while` можно передать только boolean. Запись `if (history)` или `if (item.attachment)` даёт ошибку `Boolean value needed in a condition`: объект, число и строка сами по себе условием не являются. Проверка — только сравнение, например `if (items[j].out == 1)`. Сравнение с `null` или с другим типом даёт `Comparing values of different or unsupported types`. Оператор `in` не компилируется.
+
+Ошибка отдельного API-вызова внутри `execute` не обязана обрывать весь код: на его месте в массиве ответа оказывается `false`. Текст такой ошибки ВКонтакте кладёт в `execute_errors`, но `getRequest()->post()` возвращает только `response` и этот текст не отдаёт. Поэтому пачку вызовов возвращаем списком `return [API....(), API....()];` и разбираем её в PHP, без ветвления по результату внутри VKScript.
 
 ### Использование в проекте
 
@@ -91,6 +101,10 @@ while (i < productIds.length) {
 }
 return result;
 ```
+
+#### ProcessFriendRequestWelcomeJob — пакет приветствий
+
+`findUsersWithOutgoingMessages()` и `sendDirectMessages()` вызывают `execute` так же, как `createReposts`: `$this->client->getRequest()->post('execute', $this->token, ['code' => $code])`. Код — список до 25 вызовов без `if`: `return [API.messages.getHistory(...), ...]` и `return [API.messages.send(...), ...]`. Вложение письма подставляется в параметры в PHP. Клиент SDK возвращает только поле `response`; неуспешный вызов внутри списка приходит как `false`.
 
 ### Ограничения
 

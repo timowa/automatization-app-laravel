@@ -14,33 +14,34 @@ class ProcessFriendRequestWelcomeCommand extends Command
 {
     protected $signature = 'vk:process-friend-request-welcome';
 
-    protected $description = 'Отправка одного автоприветствия по новой заявке в друзья';
+    protected $description = 'Отправка до 25 автоприветствий по новым заявкам в друзья';
 
     public function handle(): int
     {
-        $requestId = DB::transaction(function (): ?int {
-            $row = AgentVkFriendRequest::query()
+        $requestIds = DB::transaction(function (): array {
+            return AgentVkFriendRequest::query()
                 ->whereNull('message_id')
                 ->where('welcome_permanently_failed', false)
                 ->orderBy('id')
                 ->lockForUpdate()
-                ->first();
-
-            return $row?->id;
+                ->limit(ProcessFriendRequestWelcomeJob::BATCH_LIMIT)
+                ->pluck('id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
         });
 
-        if ($requestId === null) {
+        if ($requestIds === []) {
             $this->info('Нет заявок для автоприветствия');
 
             return self::SUCCESS;
         }
 
-        ProcessFriendRequestWelcomeJob::dispatch($requestId);
+        ProcessFriendRequestWelcomeJob::dispatch($requestIds[0], $requestIds);
 
         Log::channel('job')->info('Задача автоприветствия поставлена в очередь', [
-            'friend_request_id' => $requestId,
+            'friend_request_ids' => $requestIds,
         ]);
-        $this->info("Обработка заявки #{$requestId}");
+        $this->info('Обработка заявок: '.implode(', ', $requestIds));
 
         return self::SUCCESS;
     }

@@ -95,6 +95,14 @@ HTTP-клиент SDK собирается с `http_errors = false` и `VkApiRes
 
 Личное сообщение (`messages.send`), опционально с attachment вида `photo{owner}_{media}`.
 
+#### findUsersWithOutgoingMessages(array $userIds): array
+
+До 25 `messages.getHistory` одним `execute`. Возвращает id пользователей, у которых в истории есть исходящее сообщение.
+
+#### sendDirectMessages(array $messages): array
+
+До 25 `messages.send` одним `execute`, вызов тот же, что в `createReposts`. Ответ — список `{user_id, message_id, error, error_code}`. Клиент SDK возвращает только `response`: успешный вызов — номер сообщения, неуспешный — `false`.
+
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
 
 ## FakeVkApiService
