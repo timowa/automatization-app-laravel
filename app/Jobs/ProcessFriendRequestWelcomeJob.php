@@ -355,6 +355,8 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             'agent_id' => $request->agent_id,
             'user_id' => $request->user_id,
             'context' => 'friend_request_welcome',
+            'request' => $request,
+            'report' => $report,
         ]);
     }
 
