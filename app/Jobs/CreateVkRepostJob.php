@@ -137,7 +137,7 @@ class CreateVkRepostJob implements ShouldQueue
                     continue;
                 }
 
-                Log::channel('vkRepost')->warning('Репост не выполнен', [
+                Log::channel('vk-reposts')->warning('Репост не выполнен', [
                     'post_id' => $postId,
                     'group_id' => $groupId,
                     'response' => $response,
@@ -159,7 +159,7 @@ class CreateVkRepostJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         } catch (VKApiException $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
-            Log::channel('vk')->error($e->getMessage(), [
+            Log::channel('vk-reposts')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'error_code' => $e->getErrorCode(),
                 'error_message' => $e->getErrorMessage() ?? '',
@@ -169,7 +169,7 @@ class CreateVkRepostJob implements ShouldQueue
             Log::channel('job')->warning('Ошибка репоста по офферу', ['task_id' => $this->taskId]);
         } catch (\Throwable $e) {
             $task->update(['status' => PublicationTaskStatus::FAILED, 'error' => $e->getMessage()]);
-            Log::channel('vk')->error($e->getMessage(), [
+            Log::channel('vk-reposts')->error($e->getMessage(), [
                 'task_id' => $this->taskId,
                 'trace' => $e->getTraceAsString(),
                 'file' => $e->getFile(),

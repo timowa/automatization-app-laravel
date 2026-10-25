@@ -16,6 +16,8 @@ use Illuminate\Support\Facades\Log;
 use Psr\Http\Message\ResponseInterface;
 use VK\Client\Enums\VKLanguage;
 use VK\Client\VKApiClient;
+use VK\Client\VKApiError;
+use VK\Exceptions\Api\ExceptionMapper;
 use VK\Exceptions\Api\VKApiAccessGroupsException;
 use VK\Exceptions\Api\VKApiWallAddPostException;
 use VK\Exceptions\Api\VKApiWallAdsPostLimitReachedException;
@@ -31,6 +33,16 @@ class VkApiService
     public const NO_REPOST_RIGHTS_MESSAGE = 'Не найдено групп, в которые пользователь имеет право постить';
 
     public const HTTP_TIMEOUT_SECONDS = 30;
+
+    /**
+     * Заявок одного агента в одном execute.
+     * Потолок 12: на заявку до двух вызовов, внутри execute их не больше 25.
+     */
+    public const WELCOME_BATCH_LIMIT = 12;
+
+    private const EXECUTE_URI = 'https://api.vk.com/method/execute';
+
+    public const ALREADY_WROTE_ERROR = 'Агент уже написал пользователю';
 
     public const FRIEND_FIELDS = [
         'bdate',
@@ -72,6 +84,8 @@ class VkApiService
 
     protected VKApiClient $client;
 
+    private Client $http;
+
     public function setToken(string $token): void
     {
         $this->token = $token;
@@ -87,15 +101,88 @@ class VkApiService
             static fn (ResponseInterface $response): ResponseInterface => $guard->sanitize($response),
         ));
 
-        $request = $client->getRequest();
-        $property = new \ReflectionProperty($request, 'client');
-        $property->setValue($request, new Client([
+        $this->http = new Client([
             'base_uri' => 'https://api.vk.com/method',
             'timeout' => self::HTTP_TIMEOUT_SECONDS,
             'connect_timeout' => 10,
             'http_errors' => false,
             'handler' => $stack,
-        ]));
+        ]);
+
+        $request = $client->getRequest();
+        $property = new \ReflectionProperty($request, 'client');
+        $property->setValue($request, $this->http);
+    }
+
+    /**
+     * execute уходит POST-телом. Метод SDK кладёт code в адрес и на длинном
+     * скрипте ВКонтакте отвечает 414 Request-URI Too Large.
+     * Свыше 2 КБ документация просит multipart/form-data.
+     *
+     * @return array{uri: string, multipart: list<array{name: string, contents: string}>}
+     */
+    public static function executeRequest(string $code, string $token, string $version, string $lang): array
+    {
+        return [
+            'uri' => self::EXECUTE_URI,
+            'multipart' => [
+                ['name' => 'code', 'contents' => $code],
+                ['name' => 'access_token', 'contents' => $token],
+                ['name' => 'v', 'contents' => $version],
+                ['name' => 'lang', 'contents' => $lang],
+            ],
+        ];
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    private function execute(string $code): mixed
+    {
+        $request = self::executeRequest(
+            $code,
+            $this->token,
+            (string) config('vk.version', '5.199'),
+            VKLanguage::RUSSIAN,
+        );
+        $response = $this->http->post($request['uri'], [
+            'multipart' => $request['multipart'],
+        ]);
+
+        return $this->parseExecuteResponse($response);
+    }
+
+    /**
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    private function parseExecuteResponse(ResponseInterface $response): mixed
+    {
+        $status = $response->getStatusCode();
+        if ($status !== 200) {
+            throw new VKClientException('Invalid http status: '.$status);
+        }
+
+        $decoded = json_decode((string) $response->getBody(), true);
+        if (! is_array($decoded)) {
+            $decoded = [];
+        }
+
+        if (isset($decoded['error'])) {
+            $error = $decoded['error'];
+            if (! is_array($error)) {
+                throw new VKClientException('execute вернул ошибку без описания');
+            }
+
+            throw ExceptionMapper::parse(new VKApiError($error));
+        }
+
+        if (array_key_exists('response', $decoded)) {
+            return $decoded['response'];
+        }
+
+        return $decoded;
     }
 
     /**
@@ -344,9 +431,7 @@ class VkApiService
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 
     /**
@@ -568,6 +653,140 @@ VKSCRIPT;
     }
 
     /**
+     * История и отправка приветствий одним execute. Вызов как в createReposts.
+     *
+     * @param  list<array{user_id:int, message:string, random_id?:int, attachment?:string|null}>  $messages
+     * @return list<array{user_id:int, message_id:?int, error:?string}>
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     * @throws \JsonException
+     */
+    public function sendWelcomeBatch(array $messages): array
+    {
+        $payload = [];
+        foreach (array_slice($messages, 0, self::WELCOME_BATCH_LIMIT) as $message) {
+            $userId = (int) ($message['user_id'] ?? 0);
+            $text = (string) ($message['message'] ?? '');
+            if ($userId <= 0 || $text === '') {
+                continue;
+            }
+
+            $attachment = $message['attachment'] ?? '';
+            $payload[] = [
+                'user_id' => $userId,
+                'message' => $text,
+                'random_id' => (int) ($message['random_id'] ?? random_int(1, 2_147_483_647)),
+                'attachment' => is_string($attachment) ? $attachment : '',
+            ];
+        }
+        if ($payload === []) {
+            return [];
+        }
+
+        $rows = $this->execute(self::welcomeExecuteCode($payload));
+
+        return self::mapWelcomeReports($payload, $rows);
+    }
+
+    /**
+     * VKScript: на каждую заявку один отчёт {user_id, message_id, error}.
+     * if получает только boolean. Ответ messages.send при ошибке — false,
+     * а false > 0 обрывает скрипт, поэтому номер берём через parseInt("" + sent).
+     *
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
+     *
+     * @throws \JsonException
+     */
+    public static function welcomeExecuteCode(array $items): string
+    {
+        $encoded = json_encode(
+            array_values($items),
+            JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR,
+        );
+        $alreadyWrote = self::ALREADY_WROTE_ERROR;
+
+        return <<<VKSCRIPT
+var items = {$encoded};
+var res = [];
+var i = 0;
+while (i < items.length) {
+    var item = items[i];
+    var history = API.messages.getHistory({"user_id":item.user_id,"count":1});
+    var hasHistory = history.count > 0;
+
+    if (hasHistory) {
+        res.push({"user_id":item.user_id,"message_id":null,"error":"{$alreadyWrote}"});
+    } else {
+        var hasAttachment = item.attachment.length > 0;
+        var sent = null;
+        if (hasAttachment) {
+            sent = API.messages.send({"peer_id":item.user_id,"message":item.message,"random_id":item.random_id,"attachment":item.attachment,"dont_parse_links":1});
+        } else {
+            sent = API.messages.send({"peer_id":item.user_id,"message":item.message,"random_id":item.random_id,"dont_parse_links":1});
+        }
+        var sentId = parseInt("" + sent);
+        var sentOk = sentId > 0;
+        if (sentOk) {
+            res.push({"user_id":item.user_id,"message_id":sentId,"error":null});
+        } else {
+            res.push({"user_id":item.user_id,"message_id":null,"error":sent});
+        }
+    }
+    i = i + 1;
+}
+return res;
+VKSCRIPT;
+    }
+
+    /**
+     * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
+     * @return list<array{user_id:int, message_id:?int, error:?string}>
+     *
+     * @throws VKClientException
+     */
+    public static function mapWelcomeReports(array $items, mixed $rows): array
+    {
+        if (! is_array($rows) || ! array_is_list($rows) || count($rows) !== count($items)) {
+            throw new VKClientException('execute не вернул отчёт по каждой заявке');
+        }
+
+        $results = [];
+        foreach (array_values($items) as $index => $item) {
+            $row = $rows[$index] ?? null;
+            if (! is_array($row)) {
+                throw new VKClientException('execute не вернул отчёт по каждой заявке');
+            }
+
+            $messageId = $row['message_id'] ?? null;
+            if (is_string($messageId) && is_numeric($messageId)) {
+                $messageId = (int) $messageId;
+            }
+            if (! is_int($messageId) || $messageId <= 0) {
+                $messageId = null;
+            }
+
+            $error = $row['error'] ?? null;
+            if ($error === false || $error === null) {
+                $error = null;
+            } elseif (is_scalar($error)) {
+                $error = trim((string) $error);
+                $error = $error === '' ? null : $error;
+            } else {
+                $error = json_encode($error, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: null;
+            }
+
+            $results[] = [
+                'user_id' => (int) ($row['user_id'] ?? $item['user_id']),
+                'message_id' => $messageId,
+                'error' => $error,
+            ];
+        }
+
+        return $results;
+    }
+
+    /**
      * Загружает локальный файл как фото для вложений в личные сообщения.
      *
      * @return int media id из photos.saveMessagesPhoto
@@ -724,9 +943,7 @@ VKSCRIPT;
         return groupIds;
         VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
 
     }
 
@@ -893,9 +1110,7 @@ VKSCRIPT;
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 
     /**
@@ -925,8 +1140,6 @@ VKSCRIPT;
         return result;
 VKSCRIPT;
 
-        return $this->client->getRequest()->post('execute', $this->token, [
-            'code' => $code,
-        ]);
+        return $this->execute($code);
     }
 }

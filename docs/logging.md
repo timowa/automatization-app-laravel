@@ -24,7 +24,9 @@ php artisan logs:query или MCP query_logs
 
 **Файл:** `config/logging.php`
 
-Файловые каналы `single`, `daily`, `job`, `vk`, `vkRepost`, `vk-sync`, `vk-images`, `check_tokens`, `stats`, `llm` пишут JSONL. Имена файлов и ротация по суткам не изменились. Сбой записи в файл не прерывает исходную ошибку.
+Файловые каналы `single`, `daily`, `job`, `vk`, `vk-reposts`, `vk-sync`, `vk-images`, `check_tokens`, `stats`, `llm` пишут JSONL. Имена файлов и ротация по суткам не изменились. Сбой записи в файл не прерывает исходную ошибку.
+
+Канал `vk-reposts` заменяет прежний `vkRepost`. Файл: `storage/logs/vk/reposts/error-YYYY-MM-DD.log`. Туда пишутся и частичный провал репоста в группу, и ошибка всего вызова. Пока таких записей не было, файла нет: успешный репост остаётся в канале `job`.
 
 `slack`, `stderr`, `papertrail`, `syslog`, `errorlog` остаются в прежнем текстовом виде. Аварийный файл `storage/logs/laravel.log` тоже текстовый: он используется, только если канал не удалось открыть.
 

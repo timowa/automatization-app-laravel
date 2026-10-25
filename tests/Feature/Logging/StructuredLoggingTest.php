@@ -53,7 +53,7 @@ class StructuredLoggingTest extends TestCase
 
     public function test_file_channels_use_json_tap(): void
     {
-        foreach (['single', 'daily', 'job', 'vk', 'vkRepost', 'vk-sync', 'vk-images', 'check_tokens', 'stats', 'llm'] as $name) {
+        foreach (['single', 'daily', 'job', 'vk', 'vk-reposts', 'vk-sync', 'vk-images', 'check_tokens', 'stats', 'llm'] as $name) {
             $tap = config("logging.channels.{$name}.tap");
             $this->assertIsArray($tap);
             $this->assertStringContainsString(ConfigureStructuredLogging::class, $tap[0]);

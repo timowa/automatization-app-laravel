@@ -56,8 +56,10 @@ class PublishLoopStoriesCommand extends Command
 
                 $post = VkWallPost::where('offer_id', $offer->id)->first();
                 if (! $post) {
-                    Log::channel('job')->warning('Не найден пост для loop-истории', [
+                    $loopStory->update(['is_active' => false]);
+                    Log::channel('job')->warning('Повторная публикация истории остановлена: пост не найден', [
                         'offer_id' => $offer->id,
+                        'loop_story_id' => $loopStory->id,
                     ]);
 
                     continue;
@@ -79,10 +81,27 @@ class PublishLoopStoriesCommand extends Command
 
                 $vkApi->setToken($vkUser->getToken());
 
-                if (! $vkApi->wallPostExists($post->getFullId())) {
-                    Log::channel('job')->warning('Пост для loop-истории удалён или не найден во ВКонтакте', [
+                try {
+                    $postExists = $vkApi->wallPostExists($post->getFullId());
+                } catch (\Throwable $e) {
+                    $loopStory->update(['is_active' => false]);
+                    Log::channel('job')->warning('Повторная публикация истории остановлена: не удалось проверить пост', [
+                        'loop_story_id' => $loopStory->id,
+                        'post_id' => $post->id,
+                    ]);
+                    Log::channel('vk')->error($e->getMessage(), [
+                        'loop_story_id' => $loopStory->id,
+                        'post_id' => $post->id,
+                    ]);
+
+                    continue;
+                }
+
+                if (! $postExists) {
+                    Log::channel('job')->warning('Повторная публикация истории остановлена: пост удалён или не найден во ВКонтакте', [
                         'offer_id' => $offer->id,
                         'post_id' => $post->id,
+                        'loop_story_id' => $loopStory->id,
                     ]);
                     $loopStory->update(['is_active' => false]);
 

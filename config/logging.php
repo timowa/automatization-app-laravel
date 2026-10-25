@@ -54,13 +54,13 @@ return [
             ...$jsonTap('vk'),
         ],
 
-        'vkRepost' => [
+        'vk-reposts' => [
             'driver' => 'daily',
             'path' => storage_path('logs/vk/reposts/error.log'),
             'level' => 'warning',
             'days' => 7,
             'replace_placeholders' => true,
-            ...$jsonTap('vkRepost'),
+            ...$jsonTap('vk-reposts'),
         ],
 
         'vk-sync' => [

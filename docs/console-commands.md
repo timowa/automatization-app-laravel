@@ -34,6 +34,7 @@ Artisan-команды для фоновых задач: проверка ток
    - Генерирует баннер через `VkStoriesGenerator`.
    - Загружает через `VkStoryPoster` (до 3 попыток на код 1, HTTP 405 и обрыв связи).
    - При успехе обновляет `last_published_at = now()`.
+   - Если локального поста нет, `wall.getById` не подтвердил пост или проверка поста бросила ошибку, ставит `is_active = false` и не сдвигает `last_published_at`.
    - Если ссылка на фото недоступна (`StoryPublicationSkippedException` с текстом про недоступную ссылку или 404), ставит `is_active = false` и не сдвигает `last_published_at`.
    - Обрыв связи после исчерпания попыток не сдвигает `last_published_at`: цикл остаётся к следующему запуску.
 3. `usleep(350_000)` между итерациями.
@@ -122,7 +123,7 @@ Artisan-команды для фоновых задач: проверка ток
 
 Расписание: каждые 5 минут.
 
-Берёт самую старую запись `agent_vk_friend_requests` с `message_id IS NULL` и `welcome_permanently_failed = false` (`lockForUpdate`) и диспатчит `ProcessFriendRequestWelcomeJob`. Постоянный отказ ВКонтакте помечает заявку и больше её не выбирает.
+Берёт записи `agent_vk_friend_requests` с `message_id IS NULL` и `welcome_permanently_failed = false` (`orderBy id`, `lockForUpdate`), группирует по `agent_id` и для каждого агента диспатчит отдельный `ProcessFriendRequestWelcomeJob` с не более чем `VkApiService::WELCOME_BATCH_LIMIT` самыми старыми id этого агента (сейчас 7). Чужие заявки в задачу не добираются. В канал `job` пишется, какие id ушли в задачу какого агента. Между диспатчами сдвиг 1 секунда, как у `vk:sync-friend-requests`: один `execute` считается одним запросом ВК. Постоянный отказ ВКонтакте помечает только эту заявку.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
 

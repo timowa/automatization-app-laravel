@@ -390,4 +390,189 @@ class FriendRequestWelcomeTest extends TestCase
             return $job->friendRequestId === $request->id;
         });
     }
+
+    public function test_welcome_command_dispatches_one_job_per_agent_up_to_12_requests(): void
+    {
+        Queue::fake();
+        $this->travelTo('2026-10-25 12:00:00');
+        $this->assertLessThanOrEqual(12, VkApiService::WELCOME_BATCH_LIMIT);
+
+        $firstAgent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $firstAgent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $firstAgent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+
+        $secondAgent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $secondAgent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $secondAgent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+
+        $firstIds = [];
+        for ($userId = 1; $userId <= 13; $userId++) {
+            $firstIds[] = AgentVkFriendRequest::query()->create([
+                'agent_id' => $firstAgent->id,
+                'user_id' => $userId,
+                'first_name' => 'Имя',
+                'is_closed' => false,
+                'payload' => ['user_id' => $userId],
+            ])->id;
+        }
+
+        $secondIds = [];
+        foreach ([101, 102] as $userId) {
+            $secondIds[] = AgentVkFriendRequest::query()->create([
+                'agent_id' => $secondAgent->id,
+                'user_id' => $userId,
+                'first_name' => 'Имя',
+                'is_closed' => false,
+                'payload' => ['user_id' => $userId],
+            ])->id;
+        }
+
+        $this->artisan('vk:process-friend-request-welcome')->assertSuccessful();
+
+        $expectedFirst = array_slice($firstIds, 0, VkApiService::WELCOME_BATCH_LIMIT);
+        $pushed = [];
+        Queue::assertPushed(ProcessFriendRequestWelcomeJob::class, 2);
+        Queue::assertPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use (&$pushed): bool {
+            $pushed[] = $job;
+
+            return true;
+        });
+
+        $this->assertCount(2, $pushed);
+        $this->assertSame($expectedFirst, $pushed[0]->ids());
+        $this->assertSame($secondIds, $pushed[1]->ids());
+        $this->assertNotContains($firstIds[12], $pushed[0]->ids());
+        $this->assertNotContains($firstIds[12], $pushed[1]->ids());
+        $this->assertSame(
+            $pushed[0]->delay->getTimestamp() + 1,
+            $pushed[1]->delay->getTimestamp(),
+        );
+    }
+
+    public function test_welcome_job_sends_only_the_first_agent_when_ids_are_mixed(): void
+    {
+        $firstAgent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $firstAgent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $firstAgent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+        $first = AgentVkFriendRequest::query()->create([
+            'agent_id' => $firstAgent->id,
+            'user_id' => 11,
+            'first_name' => 'Первый',
+            'is_closed' => false,
+            'payload' => ['user_id' => 11],
+        ]);
+
+        $secondAgent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $secondAgent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $secondAgent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+        $second = AgentVkFriendRequest::query()->create([
+            'agent_id' => $secondAgent->id,
+            'user_id' => 12,
+            'first_name' => 'Второй',
+            'is_closed' => false,
+            'payload' => ['user_id' => 12],
+        ]);
+
+        $fake = new FakeVkApiService;
+        (new ProcessFriendRequestWelcomeJob($first->id, [$first->id, $second->id]))->handle($fake);
+
+        $first->refresh();
+        $second->refresh();
+        $this->assertNotNull($first->message_id);
+        $this->assertNull($second->message_id);
+        $this->assertFalse($second->welcome_permanently_failed);
+
+        $batchCalls = array_values(array_filter(
+            $fake->calls,
+            fn (array $call): bool => $call['method'] === 'sendWelcomeBatch',
+        ));
+        $this->assertCount(1, $batchCalls);
+        $this->assertSame(1, $batchCalls[0]['count']);
+    }
+
+    public function test_batch_welcome_keeps_other_requests_when_one_user_refuses(): void
+    {
+        $agent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+        $sent = AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 11,
+            'first_name' => 'Первый',
+            'is_closed' => false,
+            'payload' => ['user_id' => 11],
+        ]);
+        $refused = AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => 12,
+            'first_name' => 'Второй',
+            'is_closed' => false,
+            'payload' => ['user_id' => 12],
+        ]);
+
+        $fake = new FakeVkApiService;
+        $fake->welcomeSendResults = [
+            ['user_id' => 11, 'message_id' => 50],
+            [
+                'user_id' => 12,
+                'message_id' => 0,
+                'error' => "Can't send messages to this user due to their privacy settings",
+                'error_code' => 901,
+            ],
+        ];
+
+        (new ProcessFriendRequestWelcomeJob($sent->id, [$sent->id, $refused->id]))->handle($fake);
+
+        $sent->refresh();
+        $refused->refresh();
+        $this->assertSame(50, $sent->message_id);
+        $this->assertFalse($sent->welcome_permanently_failed);
+        $this->assertNull($refused->message_id);
+        $this->assertTrue($refused->welcome_permanently_failed);
+        $sendCalls = array_values(array_filter(
+            $fake->calls,
+            fn (array $call): bool => $call['method'] === 'sendDirectMessage',
+        ));
+        $this->assertCount(2, $sendCalls);
+    }
 }
