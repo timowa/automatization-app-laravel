@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Models\VkUser;
 use App\Services\Vk\FakeVkApiService;
 use App\Services\Vk\VkApiService;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Queue;
@@ -395,7 +396,13 @@ class FriendRequestWelcomeTest extends TestCase
     {
         Queue::fake();
         $this->travelTo('2026-10-25 12:00:00');
-        $this->assertLessThanOrEqual(12, VkApiService::WELCOME_BATCH_LIMIT);
+        $this->assertSame(3, VkApiService::WELCOME_BATCH_LIMIT);
+
+        $event = collect(app(Schedule::class)->events())
+            ->first(fn (object $event): bool => str_contains((string) $event->command, 'vk:process-friend-request-welcome'));
+
+        $this->assertNotNull($event);
+        $this->assertSame('0 * * * *', $event->expression);
 
         $firstAgent = Agent::factory()->create();
         VkUser::factory()->create([

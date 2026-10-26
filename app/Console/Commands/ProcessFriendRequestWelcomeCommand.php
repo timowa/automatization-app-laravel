@@ -15,7 +15,7 @@ class ProcessFriendRequestWelcomeCommand extends Command
 {
     protected $signature = 'vk:process-friend-request-welcome';
 
-    protected $description = 'Отправка до 7 автоприветствий каждому агенту по новым заявкам в друзья';
+    protected $description = 'Отправка до 3 автоприветствий каждому агенту по новым заявкам в друзья';
 
     public function handle(): int
     {

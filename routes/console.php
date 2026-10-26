@@ -16,4 +16,4 @@ Schedule::command('vk:dispatch-birthday-wishes')->dailyAt('04:00');
 Schedule::command('vk:publish-loop-stories')->dailyAt('10:00');
 Schedule::command('vk:get-stats')->everyTwoHours();
 Schedule::command('vk:sync-friend-requests')->cron('0 0,6,12,18 * * *');
-Schedule::command('vk:process-friend-request-welcome')->everyFiveMinutes();
+Schedule::command('vk:process-friend-request-welcome')->hourly();

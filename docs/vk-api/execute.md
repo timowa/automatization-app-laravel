@@ -108,7 +108,7 @@ return result;
 
 `sendWelcomeBatch()`, `createReposts()`, пакеты товаров и список групп вызывают один и тот же `VkApiService::execute()`. Скрипт уходит в теле POST (`multipart/form-data`: `code`, `access_token`, `v`, `lang`). Адрес запроса — только `https://api.vk.com/method/execute`. Метод SDK `getRequest()->post()` кладёт параметры в строку адреса, и на длинном скрипте ВКонтакте отвечает `414 Request-URI Too Large`. Ответ разбирается так же, как у SDK: при коде не 200 — исключение клиента, при `error` — исключение API, наружу возвращается поле `response`.
 
-В приветствие попадает не больше `VkApiService::WELCOME_BATCH_LIMIT` заявок (сейчас 7; потолок 12 = `floor(25 / 2)`): на заявку уходит `messages.getHistory` и, если `count` равен 0, ещё `messages.send`, а внутри `execute` не больше 25 вызовов. Один `ProcessFriendRequestWelcomeJob` передаёт заявки одного агента и делает один такой вызов.
+В приветствие попадает не больше `VkApiService::WELCOME_BATCH_LIMIT` заявок (сейчас 3; технический потолок 12 = `floor(25 / 2)`): на заявку уходит `messages.getHistory` и, если `count` равен 0, ещё `messages.send`, а внутри `execute` не больше 25 вызовов. Один `ProcessFriendRequestWelcomeJob` передаёт заявки одного агента и делает один такой вызов.
 
 ```javascript
 var items = [/* user_id, message, random_id, attachment */];

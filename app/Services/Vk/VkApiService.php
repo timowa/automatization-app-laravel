@@ -35,10 +35,10 @@ class VkApiService
     public const HTTP_TIMEOUT_SECONDS = 30;
 
     /**
-     * Заявок одного агента в одном execute.
-     * Потолок 4: на заявку до двух вызовов, внутри execute их не больше 25.
+     * Заявок одного агента за один проход. Расписание — раз в час, за сутки не больше 72.
+     * Технический потолок execute — 12: на заявку до двух вызовов, внутри execute их не больше 25.
      */
-    public const WELCOME_BATCH_LIMIT = 4;
+    public const WELCOME_BATCH_LIMIT = 3;
 
     private const EXECUTE_URI = 'https://api.vk.com/method/execute';
 
