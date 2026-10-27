@@ -14,9 +14,14 @@ use App\Models\Setting;
 use App\Models\VkUser;
 use App\Services\Vk\FakeVkApiService;
 use App\Services\Vk\VkApiService;
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Psr7\Response;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
@@ -581,5 +586,135 @@ class FriendRequestWelcomeTest extends TestCase
             fn (array $call): bool => $call['method'] === 'sendDirectMessage',
         ));
         $this->assertCount(2, $sendCalls);
+    }
+
+    public function test_execute_false_with_write_ban_is_reported_and_skipped_next_hour(): void
+    {
+        $userId = 600741496;
+        $ban = "Can't send messages for users without permission";
+        $body = json_encode([
+            'response' => [
+                ['user_id' => $userId, 'message_id' => null, 'error' => false],
+            ],
+            'execute_errors' => [
+                [
+                    'method' => 'messages.send',
+                    'error_code' => 902,
+                    'error_msg' => $ban,
+                ],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $reports = $this->reportsFromExecuteBody($body, $userId);
+        $this->assertSame($ban, $reports[0]['error']);
+        $this->assertSame(902, $reports[0]['error_code']);
+        $this->assertNull($reports[0]['message_id']);
+
+        $request = $this->makeWelcomeRequest($userId);
+        $messages = [];
+        Log::listen(function (object $event) use (&$messages): void {
+            $messages[] = (string) ($event->message ?? '');
+        });
+        (new ProcessFriendRequestWelcomeJob($request->id))->handle(new WelcomeExecuteHttp($body));
+
+        $this->assertContains($ban, $messages);
+        $this->assertNotContains('Автоприветствие на заявку в друзья отправлено', $messages);
+
+        Queue::fake();
+        $this->artisan('vk:process-friend-request-welcome')->assertSuccessful();
+        Queue::assertNotPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use ($request): bool {
+            return in_array($request->id, $job->ids(), true);
+        });
+    }
+
+    public function test_execute_false_without_errors_is_not_success_and_is_not_selected_again(): void
+    {
+        $userId = 600741498;
+        $body = json_encode([
+            'response' => [
+                ['user_id' => $userId, 'message_id' => null, 'error' => false],
+            ],
+        ], JSON_THROW_ON_ERROR);
+
+        $reports = $this->reportsFromExecuteBody($body, $userId);
+        $this->assertNull($reports[0]['message_id']);
+        $this->assertNull($reports[0]['error']);
+        $this->assertNull($reports[0]['error_code']);
+
+        $request = $this->makeWelcomeRequest($userId);
+        $messages = [];
+        Log::listen(function (object $event) use (&$messages): void {
+            $messages[] = (string) ($event->message ?? '');
+        });
+        (new ProcessFriendRequestWelcomeJob($request->id))->handle(new WelcomeExecuteHttp($body));
+
+        $this->assertNotContains('Автоприветствие на заявку в друзья отправлено', $messages);
+        $this->assertContains('ВКонтакте не вернул номер сообщения', $messages);
+
+        Queue::fake();
+        $this->artisan('vk:process-friend-request-welcome')->assertSuccessful();
+        Queue::assertNotPushed(ProcessFriendRequestWelcomeJob::class, function (ProcessFriendRequestWelcomeJob $job) use ($request): bool {
+            return in_array($request->id, $job->ids(), true);
+        });
+    }
+
+    /**
+     * @return list<array{user_id:int, message_id:?int, error:?string, error_code:?int}>
+     */
+    private function reportsFromExecuteBody(string $body, int $userId): array
+    {
+        $service = new VkApiService;
+        $parsed = (new \ReflectionMethod(VkApiService::class, 'parseExecuteResponse'))
+            ->invoke($service, new Response(200, [], $body));
+        $this->assertIsArray($parsed);
+
+        return VkApiService::mapWelcomeReports([
+            ['user_id' => $userId, 'message' => 'Здравствуйте', 'random_id' => 1, 'attachment' => ''],
+        ], $parsed['response'], $parsed['execute_errors']);
+    }
+
+    private function makeWelcomeRequest(int $userId): AgentVkFriendRequest
+    {
+        $agent = Agent::factory()->create();
+        VkUser::factory()->create([
+            'agent_id' => $agent->id,
+            'is_token_available' => true,
+            'vk_token' => 'token',
+        ]);
+        Setting::create([
+            'agent_id' => $agent->id,
+            'friend_request_welcome_enabled' => true,
+            'friend_request_welcome_text' => 'Здравствуйте',
+        ]);
+
+        return AgentVkFriendRequest::query()->create([
+            'agent_id' => $agent->id,
+            'user_id' => $userId,
+            'first_name' => 'Заявитель',
+            'is_closed' => false,
+            'payload' => ['user_id' => $userId],
+        ]);
+    }
+}
+
+/**
+ * Отдаёт заранее собранный ответ execute, не ходя в ВКонтакте.
+ */
+class WelcomeExecuteHttp extends VkApiService
+{
+    public function __construct(private readonly string $executeBody) {}
+
+    public function setToken(string $token): void
+    {
+        parent::setToken($token);
+
+        $http = new Client([
+            'handler' => HandlerStack::create(new MockHandler([
+                new Response(200, [], $this->executeBody),
+            ])),
+            'http_errors' => false,
+        ]);
+
+        (new \ReflectionProperty(VkApiService::class, 'http'))->setValue($this, $http);
     }
 }

@@ -140,6 +140,20 @@ class VkApiService
      */
     private function execute(string $code): mixed
     {
+        return $this->executeCall($code)['response'];
+    }
+
+    /**
+     * Репостам и товарам нужен только результат скрипта.
+     * Приветствие дополнительно читает execute_errors.
+     *
+     * @return array{response: mixed, execute_errors: list<array<string, mixed>>}
+     *
+     * @throws VKApiException
+     * @throws VKClientException
+     */
+    private function executeCall(string $code): array
+    {
         $request = self::executeRequest(
             $code,
             $this->token,
@@ -154,10 +168,15 @@ class VkApiService
     }
 
     /**
+     * Поле response не меняется: его по-прежнему получают репосты и товары.
+     * execute_errors остаются рядом, чтобы приветствие могло прочитать отказ вызова.
+     *
+     * @return array{response: mixed, execute_errors: list<array<string, mixed>>}
+     *
      * @throws VKApiException
      * @throws VKClientException
      */
-    private function parseExecuteResponse(ResponseInterface $response): mixed
+    private function parseExecuteResponse(ResponseInterface $response): array
     {
         $status = $response->getStatusCode();
         if ($status !== 200) {
@@ -178,11 +197,21 @@ class VkApiService
             throw ExceptionMapper::parse(new VKApiError($error));
         }
 
-        if (array_key_exists('response', $decoded)) {
-            return $decoded['response'];
+        $executeErrors = [];
+        if (isset($decoded['execute_errors']) && is_array($decoded['execute_errors'])) {
+            foreach ($decoded['execute_errors'] as $error) {
+                if (is_array($error)) {
+                    $executeErrors[] = $error;
+                }
+            }
         }
 
-        return $decoded;
+        $body = array_key_exists('response', $decoded) ? $decoded['response'] : $decoded;
+
+        return [
+            'response' => $body,
+            'execute_errors' => $executeErrors,
+        ];
     }
 
     /**
@@ -656,7 +685,7 @@ VKSCRIPT;
      * История и отправка приветствий одним execute. Вызов как в createReposts.
      *
      * @param  list<array{user_id:int, message:string, random_id?:int, attachment?:string|null}>  $messages
-     * @return list<array{user_id:int, message_id:?int, error:?string}>
+     * @return list<array{user_id:int, message_id:?int, error:?string, error_code:?int}>
      *
      * @throws VKApiException
      * @throws VKClientException
@@ -684,15 +713,17 @@ VKSCRIPT;
             return [];
         }
 
-        $rows = $this->execute(self::welcomeExecuteCode($payload));
+        $parsed = $this->executeCall(self::welcomeExecuteCode($payload));
 
-        return self::mapWelcomeReports($payload, $rows);
+        return self::mapWelcomeReports($payload, $parsed['response'], $parsed['execute_errors']);
     }
 
     /**
      * VKScript: на каждую заявку один отчёт {user_id, message_id, error}.
      * if получает только boolean. Ответ messages.send при ошибке — false,
      * а false > 0 обрывает скрипт, поэтому номер берём через parseInt("" + sent).
+     * false в error — сбой этого вызова. Код и текст лежат в execute_errors
+     * ответа execute и переносятся в отчёт в mapWelcomeReports по порядку таких false.
      *
      * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
      *
@@ -741,15 +772,24 @@ VKSCRIPT;
 
     /**
      * @param  list<array{user_id:int, message:string, random_id:int, attachment:string}>  $items
-     * @return list<array{user_id:int, message_id:?int, error:?string}>
+     * @param  list<array<string, mixed>>  $executeErrors
+     * @return list<array{user_id:int, message_id:?int, error:?string, error_code:?int}>
      *
      * @throws VKClientException
      */
-    public static function mapWelcomeReports(array $items, mixed $rows): array
+    public static function mapWelcomeReports(array $items, mixed $rows, array $executeErrors = []): array
     {
         if (! is_array($rows) || ! array_is_list($rows) || count($rows) !== count($items)) {
             throw new VKClientException('execute не вернул отчёт по каждой заявке');
         }
+
+        $pendingErrors = [];
+        foreach ($executeErrors as $apiError) {
+            if (is_array($apiError)) {
+                $pendingErrors[] = $apiError;
+            }
+        }
+        $errorCursor = 0;
 
         $results = [];
         foreach (array_values($items) as $index => $item) {
@@ -767,7 +807,17 @@ VKSCRIPT;
             }
 
             $error = $row['error'] ?? null;
-            if ($error === false || $error === null) {
+            $errorCode = null;
+            if ($error === false) {
+                $apiError = $pendingErrors[$errorCursor] ?? null;
+                $errorCursor++;
+                $error = null;
+                if (is_array($apiError)) {
+                    $parsed = self::readExecuteError($apiError);
+                    $error = $parsed['error'];
+                    $errorCode = $parsed['error_code'];
+                }
+            } elseif ($error === null) {
                 $error = null;
             } elseif (is_scalar($error)) {
                 $error = trim((string) $error);
@@ -780,10 +830,33 @@ VKSCRIPT;
                 'user_id' => (int) ($row['user_id'] ?? $item['user_id']),
                 'message_id' => $messageId,
                 'error' => $error,
+                'error_code' => $errorCode,
             ];
         }
 
         return $results;
+    }
+
+    /**
+     * @param  array<string, mixed>  $apiError
+     * @return array{error: ?string, error_code: ?int}
+     */
+    private static function readExecuteError(array $apiError): array
+    {
+        $code = (int) ($apiError['error_code'] ?? 0);
+        $message = $apiError['error_msg'] ?? null;
+        if (is_string($message)) {
+            $message = trim($message);
+        } elseif (is_scalar($message)) {
+            $message = trim((string) $message);
+        } else {
+            $message = '';
+        }
+
+        return [
+            'error' => $message === '' ? null : $message,
+            'error_code' => $code > 0 ? $code : null,
+        ];
     }
 
     /**

@@ -50,7 +50,7 @@
 
 В условие `if` и `while` можно передать только boolean. Запись `if (history)` или `if (item.attachment)` даёт ошибку `Boolean value needed in a condition`: объект, число и строка сами по себе условием не являются. Проверка — только сравнение, например `if (items[j].out == 1)`. Сравнение с `null` или с другим типом даёт `Comparing values of different or unsupported types`. Оператор `in` не компилируется.
 
-Ошибка отдельного API-вызова внутри `execute` не обязана обрывать весь код: результат такого вызова — `false`. Текст ошибки ВКонтакте кладёт в `execute_errors`, но `getRequest()->post()` возвращает только `response` и этот текст не отдаёт.
+Ошибка отдельного API-вызова внутри `execute` не обязана обрывать весь код: результат такого вызова — `false`. Текст и код ошибки ВКонтакте кладёт в `execute_errors`. `VkApiService::execute()` по-прежнему отдаёт только `response` — так разбираются репосты и товары. Для приветствия `parseExecuteResponse` сохраняет `execute_errors`, а `mapWelcomeReports` переносит код и текст в отчёт заявки, у которой вызов вернул `false`.
 
 `false > 0` и любое сравнение `false` с числом обрывают весь скрипт (`Comparing values of different or unsupported types`). Проверенный обход: `var sentId = parseInt("" + sent); var sentOk = sentId > 0;`. Для `false` конкатенация даёт пустую строку, `parseInt` даёт `0`, `0 > 0` — boolean `false`. Для номера сообщения `parseInt` возвращает само число. `null` в литерале объекта допустим: `{"message_id": null, "error": null}`.
 
@@ -106,7 +106,7 @@ return result;
 
 #### ProcessFriendRequestWelcomeJob — пакет приветствий
 
-`sendWelcomeBatch()`, `createReposts()`, пакеты товаров и список групп вызывают один и тот же `VkApiService::execute()`. Скрипт уходит в теле POST (`multipart/form-data`: `code`, `access_token`, `v`, `lang`). Адрес запроса — только `https://api.vk.com/method/execute`. Метод SDK `getRequest()->post()` кладёт параметры в строку адреса, и на длинном скрипте ВКонтакте отвечает `414 Request-URI Too Large`. Ответ разбирается так же, как у SDK: при коде не 200 — исключение клиента, при `error` — исключение API, наружу возвращается поле `response`.
+`sendWelcomeBatch()`, `createReposts()`, пакеты товаров и список групп вызывают один и тот же разбор HTTP-ответа `parseExecuteResponse`. Скрипт уходит в теле POST (`multipart/form-data`: `code`, `access_token`, `v`, `lang`). Адрес запроса — только `https://api.vk.com/method/execute`. Метод SDK `getRequest()->post()` кладёт параметры в строку адреса, и на длинном скрипте ВКонтакте отвечает `414 Request-URI Too Large`. При коде не 200 — исключение клиента, при `error` — исключение API. Репостам и товарам `execute()` отдаёт поле `response`. Приветствие через `executeCall()` дополнительно читает `execute_errors`.
 
 В приветствие попадает не больше `VkApiService::WELCOME_BATCH_LIMIT` заявок (сейчас 3; технический потолок 12 = `floor(25 / 2)`): на заявку уходит `messages.getHistory` и, если `count` равен 0, ещё `messages.send`, а внутри `execute` не больше 25 вызовов. Один `ProcessFriendRequestWelcomeJob` передаёт заявки одного агента и делает один такой вызов.
 
@@ -142,6 +142,8 @@ return res;
 ```
 
 `hasHistory`, `hasAttachment` и `sentOk` — boolean, их можно передавать в `if`. Условие `if (history)` или `sent > 0` при ответе `false` скрипт не компилирует или обрывает.
+
+`error: false` в отчёте — `messages.send` не прошёл. `mapWelcomeReports` берёт следующий элемент `execute_errors` и кладёт в отчёт `error_msg` и `error_code`. Успешная отправка и уже существующая переписка элемент не занимают. Если для `false` пары нет, отчёт пустой: номера сообщения нет и текста ошибки нет.
 
 ### Ограничения
 

@@ -123,7 +123,7 @@ Artisan-команды для фоновых задач: проверка ток
 
 Расписание: раз в час (`hourly()`, в начале каждого часа). За сутки одному агенту — не больше 72 заявок.
 
-Берёт записи `agent_vk_friend_requests` с `message_id IS NULL` и `welcome_permanently_failed = false` (`orderBy id`, `lockForUpdate`), группирует по `agent_id` и для каждого агента диспатчит отдельный `ProcessFriendRequestWelcomeJob` с не более чем `VkApiService::WELCOME_BATCH_LIMIT` самыми старыми id этого агента (сейчас 3). Чужие заявки в задачу не добираются. В канал `job` пишется, какие id ушли в задачу какого агента. Между диспатчами сдвиг 1 секунда, как у `vk:sync-friend-requests`: один `execute` считается одним запросом ВК. Постоянный отказ ВКонтакте помечает только эту заявку.
+Берёт записи `agent_vk_friend_requests` с `message_id IS NULL` и `welcome_permanently_failed = false` (`orderBy id`, `lockForUpdate`), группирует по `agent_id` и для каждого агента диспатчит отдельный `ProcessFriendRequestWelcomeJob` с не более чем `VkApiService::WELCOME_BATCH_LIMIT` самыми старыми id этого агента (сейчас 3). Чужие заявки в задачу не добираются. В канал `job` пишется, какие id ушли в задачу какого агента. Между диспатчами сдвиг 1 секунда, как у `vk:sync-friend-requests`: один `execute` считается одним запросом ВК. Постоянный отказ и ответ без номера сообщения и без текста ошибки помечают только эту заявку, она больше не выбирается. Временный отказ с текстом остаётся в выборке.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
 

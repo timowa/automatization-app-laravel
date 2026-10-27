@@ -140,7 +140,7 @@ class FakeVkApiService extends VkApiService
 
     /**
      * @param  list<array{user_id:int, message:string, attachment?:string|null}>  $messages
-     * @return list<array{user_id:int, message_id:?int, error:?string}>
+     * @return list<array{user_id:int, message_id:?int, error:?string, error_code:?int}>
      */
     public function sendWelcomeBatch(array $messages): array
     {
@@ -160,11 +160,13 @@ class FakeVkApiService extends VkApiService
 
             return array_map(function (array $result): array {
                 $messageId = (int) ($result['message_id'] ?? 0);
+                $errorCode = (int) ($result['error_code'] ?? 0);
 
                 return [
                     'user_id' => (int) $result['user_id'],
                     'message_id' => $messageId > 1 ? $messageId : null,
                     'error' => isset($result['error']) && $result['error'] !== '' ? (string) $result['error'] : null,
+                    'error_code' => $errorCode > 0 ? $errorCode : null,
                 ];
             }, $this->welcomeSendResults);
         }
@@ -176,6 +178,7 @@ class FakeVkApiService extends VkApiService
                     'user_id' => (int) $message['user_id'],
                     'message_id' => null,
                     'error' => VkApiService::ALREADY_WROTE_ERROR,
+                    'error_code' => null,
                 ];
 
                 continue;
@@ -194,12 +197,15 @@ class FakeVkApiService extends VkApiService
                     'user_id' => (int) $message['user_id'],
                     'message_id' => fake()->unique()->numberBetween(2, 1_000_000),
                     'error' => null,
+                    'error_code' => null,
                 ];
             } catch (\Throwable $e) {
+                $code = $e instanceof VKApiException ? $e->getErrorCode() : 0;
                 $results[] = [
                     'user_id' => (int) $message['user_id'],
                     'message_id' => null,
                     'error' => $e->getMessage(),
+                    'error_code' => $code > 0 ? $code : null,
                 ];
             }
         }

@@ -97,7 +97,7 @@ HTTP-клиент SDK собирается с `http_errors = false` и `VkApiRes
 
 #### sendWelcomeBatch(array $messages): array
 
-Не больше `VkApiService::WELCOME_BATCH_LIMIT` (сейчас 3, технический потолок 12) приветствий одним `execute`. Вызов тот же, что у `createReposts`: POST-тело, не адрес. Потолок 12 — это `floor(25 / 2)`: на заявку уходит `messages.getHistory` и `messages.send`, внутри `execute` не больше 25 вызовов. Скрипт для каждой заявки смотрит `messages.getHistory`: если `count > 0`, письмо не шлёт. Иначе вызывает `messages.send`. Ответ — список `{user_id, message_id, error}` той же длины, что и переданный в скрипт вход (лишнее обрезается). Наружу возвращается поле `response`.
+Не больше `VkApiService::WELCOME_BATCH_LIMIT` (сейчас 3, технический потолок 12) приветствий одним `execute`. Вызов тот же, что у `createReposts`: POST-тело, не адрес. Потолок 12 — это `floor(25 / 2)`: на заявку уходит `messages.getHistory` и `messages.send`, внутри `execute` не больше 25 вызовов. Скрипт для каждой заявки смотрит `messages.getHistory`: если `count > 0`, письмо не шлёт. Иначе вызывает `messages.send`. Ответ — список `{user_id, message_id, error, error_code}` той же длины, что и переданный в скрипт вход (лишнее обрезается). Если `messages.send` вернул `false`, в этот отчёт переносятся `error_code` и `error_msg` из `execute_errors` по порядку таких вызовов. `execute()` для репостов и товаров по-прежнему отдаёт только `response`.
 
 Подробнее: [friend-request-welcome.md](friend-request-welcome.md).
 

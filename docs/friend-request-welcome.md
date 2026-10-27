@@ -91,7 +91,7 @@ vk:process-friend-request-welcome
 | `first_name`, `last_name`, … | Снимок из `friends.getRequests` |
 | `payload` | Сырой фрагмент ответа |
 | `message_id` | `NULL` — ещё не обработано; иначе ID сообщения во ВК |
-| `welcome_permanently_failed` | `true` — ВКонтакте постоянно отказал (приватность, нет права писать, пользователь недоступен). Такая заявка больше не выбирается. Временный сбой (лимит, обрыв связи) флаг не ставит |
+| `welcome_permanently_failed` | `true` — заявка больше не выбирается. Так закрывается постоянный отказ ВКонтакте (приватность, нет права писать, пользователь недоступен) и ответ без номера сообщения и без текста ошибки. Временный отказ с текстом флаг не ставит, `message_id` остаётся пустым |
 
 Константа `AGENT_ALREADY_MESSAGED_SENTINEL = 1` — зарезервированный признак «переписка уже есть». В отчёте `execute` у такой заявки `message_id = null` и `error = "Агент уже написал пользователю"`. В строку пишется sentinel, чтобы заявка не выбиралась снова.
 
@@ -125,16 +125,17 @@ vk:process-friend-request-welcome
 - Между диспатчами сдвиг 1 секунда, как у `SyncFriendRequestsCommand`. Один `execute` считается одним запросом ВК (не больше 3 в секунду). Очередь хранит время запуска целым числом секунд, поэтому пауза между задачами не короче секунды.
 - Job рассчитан на одного агента: один токен и один `sendWelcomeBatch`. Если в задачу попали заявки другого агента, уходят только заявки первого по `id`, остальные остаются в очереди, в канал `job` пишется warning.
 - В одном скрипте не больше `VkApiService::WELCOME_BATCH_LIMIT` заявок (сейчас 3). Технический потолок 12: на заявку до двух вызовов (`messages.getHistory` и, если истории нет, `messages.send`), внутри `execute` их не больше 25. `sendWelcomeBatch` обрезает вход до константы. Скрипт уходит в теле POST, не в адресе: иначе длинный текст даёт ответ 414.
-- Скрипт возвращает отчёт по каждой переданной заявке: `user_id`, `message_id`, `error`.
+- Скрипт возвращает отчёт по каждой переданной заявке: `user_id`, `message_id`, `error`, `error_code`.
   - `history.count > 0` — письмо не отправляется, `error = "Агент уже написал пользователю"`.
-  - отправка прошла — в отчёте номер сообщения, `error = null`.
-  - отправка не прошла — `message_id = null`, `error` равен тому, что вернул `messages.send` (при отказе внутри скрипта это `false`, текста ошибки в отчёте нет).
+  - отправка прошла — в отчёте номер сообщения, `error = null`, `error_code = null`.
+  - `messages.send` вернул `false` — `mapWelcomeReports` переносит в этот отчёт `error_code` и `error_msg` из `execute_errors` по порядку таких вызовов. `parseExecuteResponse` сохраняет `execute_errors`. `execute()` для репостов и товаров по-прежнему отдаёт только `response`.
+  - `false` без пары в `execute_errors` — `message_id = null`, `error = null`. Это не успех.
 - Если `execute` не вернул массив той же длины, в `job` пишется предупреждение, текст — в канал `vk`. Пачка остаётся в очереди. Постоянный отказ по такому сбою ставится только когда в пачке одна заявка и текст ошибки известен.
 - По каждой заявке из успешного отчёта отдельная строка: успех с номером сообщения или неуспех. Текст отказа ВКонтакте — в канале `vk`.
 - Текст: `FriendRequestWelcomeText::resolveTemplate()`.
 - Attachment: `FriendRequestWelcomeText::photoAttachment(ownerId, mediaId)` при наличии визитки. В скрипт вложение попадает только если строка не пустая (`attachment.length > 0`).
 - Успех → атомарный `UPDATE … WHERE message_id IS NULL`.
-- Постоянный отказ конкретного пользователя (`VkApiErrorInspector::isPermanentDirectMessageRefusal()`) ставит `welcome_permanently_failed = true` только у этой заявки и не пишет `message_id`. Отказ одного человека не закрывает остальные заявки агента. Временный сбой оставляет заявку в очереди.
+- `handleFailure()` разбирает отчёт без номера сообщения. Постоянный отказ (`VkApiErrorInspector::isPermanentDirectMessageRefusal()` по коду или тексту) ставит `welcome_permanently_failed = true` только у этой заявки и не пишет `message_id`. Отказ одного человека не закрывает остальные заявки агента. Временный отказ с текстом флаг не ставит: заявка ждёт следующего часового запуска. Нет номера и нет текста ошибки — тот же флаг, `message_id` остаётся пустым, заявка больше не выбирается.
 - Rate limit между агентами обеспечивает сдвиг диспатча на 1 секунду. Внутри job повторных вызовов `execute` нет.
 
 ## VkApiService (новые методы)
@@ -143,7 +144,7 @@ vk:process-friend-request-welcome
 |---|---|
 | `getFriendRequests()` | `friends.getRequests` (extended) |
 | `hasOutgoingMessageWithUser(int $userId)` | `messages.getHistory` |
-| `sendWelcomeBatch(list<array> $messages)` | один `execute`: `messages.getHistory`, затем при пустой истории `messages.send`. Не больше `VkApiService::WELCOME_BATCH_LIMIT`. POST-тело, как у `createReposts` |
+| `sendWelcomeBatch(list<array> $messages)` | один `execute`: `messages.getHistory`, затем при пустой истории `messages.send`. `false` дополняется кодом и текстом из `execute_errors`. Не больше `VkApiService::WELCOME_BATCH_LIMIT`. POST-тело, как у `createReposts` |
 | `uploadMessagesPhoto(string $absolutePath)` | upload server + `photos.saveMessagesPhoto`, возвращает `media_id` |
 | `sendDirectMessage(int $userId, string $message, ?string $attachment)` | `messages.send` (одиночное письмо, не пакет приветствий) |
 

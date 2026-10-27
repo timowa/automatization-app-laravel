@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Unit\Services\Vk;
 
 use App\Services\Vk\VkApiService;
+use GuzzleHttp\Psr7\Response;
 use PHPUnit\Framework\TestCase;
 use VK\Exceptions\VKClientException;
 
@@ -28,6 +29,61 @@ class DirectMessageBatchTest extends TestCase
         $this->assertNull($results[1]['error']);
         $this->assertNull($results[2]['message_id']);
         $this->assertNull($results[2]['error']);
+        $this->assertNull($results[2]['error_code']);
+    }
+
+    public function test_false_send_copies_execute_errors_in_call_order(): void
+    {
+        $ban = "Can't send messages for users without permission";
+        $parsed = $this->parseExecute([
+            'response' => [
+                ['user_id' => 10, 'message_id' => null, 'error' => false],
+                ['user_id' => 11, 'message_id' => 501, 'error' => null],
+                ['user_id' => 12, 'message_id' => null, 'error' => false],
+            ],
+            'execute_errors' => [
+                ['method' => 'messages.send', 'error_code' => 902, 'error_msg' => $ban],
+                ['method' => 'messages.send', 'error_code' => 6, 'error_msg' => 'Too many requests per second'],
+            ],
+        ]);
+
+        $this->assertSame([
+            ['user_id' => 10, 'message_id' => null, 'error' => false],
+            ['user_id' => 11, 'message_id' => 501, 'error' => null],
+            ['user_id' => 12, 'message_id' => null, 'error' => false],
+        ], $parsed['response']);
+
+        $results = VkApiService::mapWelcomeReports([
+            ['user_id' => 10, 'message' => 'a', 'random_id' => 1, 'attachment' => ''],
+            ['user_id' => 11, 'message' => 'b', 'random_id' => 2, 'attachment' => ''],
+            ['user_id' => 12, 'message' => 'c', 'random_id' => 3, 'attachment' => ''],
+        ], $parsed['response'], $parsed['execute_errors']);
+
+        $this->assertSame($ban, $results[0]['error']);
+        $this->assertSame(902, $results[0]['error_code']);
+        $this->assertNull($results[0]['message_id']);
+        $this->assertSame(501, $results[1]['message_id']);
+        $this->assertNull($results[1]['error']);
+        $this->assertNull($results[1]['error_code']);
+        $this->assertSame('Too many requests per second', $results[2]['error']);
+        $this->assertSame(6, $results[2]['error_code']);
+    }
+
+    public function test_false_without_execute_errors_stays_an_empty_report(): void
+    {
+        $parsed = $this->parseExecute([
+            'response' => [
+                ['user_id' => 12, 'message_id' => null, 'error' => false],
+            ],
+        ]);
+
+        $results = VkApiService::mapWelcomeReports([
+            ['user_id' => 12, 'message' => 'a', 'random_id' => 1, 'attachment' => ''],
+        ], $parsed['response'], $parsed['execute_errors']);
+
+        $this->assertNull($results[0]['message_id']);
+        $this->assertNull($results[0]['error']);
+        $this->assertNull($results[0]['error_code']);
     }
 
     public function test_rejects_execute_body_without_a_report_per_request(): void
@@ -78,5 +134,23 @@ class DirectMessageBatchTest extends TestCase
         );
         $this->assertSame($code, $request['multipart'][0]['contents']);
         $this->assertSame('vk1.secret-token', $request['multipart'][1]['contents']);
+    }
+
+    /**
+     * @param  array<string, mixed>  $decoded
+     * @return array{response: mixed, execute_errors: list<array<string, mixed>>}
+     */
+    private function parseExecute(array $decoded): array
+    {
+        $service = new VkApiService;
+        $parsed = (new \ReflectionMethod(VkApiService::class, 'parseExecuteResponse'))
+            ->invoke($service, new Response(
+                200,
+                [],
+                json_encode($decoded, JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE),
+            ));
+        $this->assertIsArray($parsed);
+
+        return $parsed;
     }
 }

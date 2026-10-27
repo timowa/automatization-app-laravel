@@ -285,7 +285,7 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
     }
 
     /**
-     * @param  array{user_id:int, message_id:?int, error:?string}  $report
+     * @param  array{user_id:int, message_id:?int, error:?string, error_code?:?int}  $report
      */
     private function applyReport(AgentVkFriendRequest $request, array $report): void
     {
@@ -332,18 +332,32 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        if (is_string($error) && $error !== '') {
-            $this->handleFailure($request, new VKApiException(
-                0,
-                $error,
-                new VKApiError([
-                    'error_code' => 0,
-                    'error_msg' => $error,
-                ]),
-            ));
+        $errorText = is_string($error) ? trim($error) : '';
+        $errorCode = (int) ($report['error_code'] ?? 0);
+        $this->handleFailure($request, new VKApiException(
+            $errorCode,
+            $errorText,
+            new VKApiError([
+                'error_code' => $errorCode,
+                'error_msg' => $errorText,
+            ]),
+        ), $report);
+    }
 
-            return;
-        }
+    /**
+     * Номера сообщения нет и текста ошибки нет: это не успех и не повтор через час.
+     *
+     * @param  array<string, mixed>|null  $report
+     */
+    private function excludeReportWithoutError(AgentVkFriendRequest $request, ?array $report): void
+    {
+        DB::table('agent_vk_friend_requests')
+            ->where('id', $request->id)
+            ->whereNull('message_id')
+            ->update([
+                'welcome_permanently_failed' => true,
+                'updated_at' => now(),
+            ]);
 
         Log::channel('job')->warning('Ошибка автоприветствия на заявку в друзья', [
             'friend_request_id' => $request->id,
@@ -360,7 +374,10 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
         ]);
     }
 
-    private function handleFailure(AgentVkFriendRequest $request, \Throwable $e): void
+    /**
+     * @param  array<string, mixed>|null  $report
+     */
+    private function handleFailure(AgentVkFriendRequest $request, \Throwable $e, ?array $report = null): void
     {
         if (VkApiErrorInspector::isPermanentDirectMessageRefusal($e)) {
             DB::table('agent_vk_friend_requests')
@@ -383,6 +400,12 @@ class ProcessFriendRequestWelcomeJob implements ShouldBeUnique, ShouldQueue
                 'context' => 'friend_request_welcome',
                 'permanent' => true,
             ]);
+
+            return;
+        }
+
+        if (trim($e->getMessage()) === '') {
+            $this->excludeReportWithoutError($request, $report);
 
             return;
         }
