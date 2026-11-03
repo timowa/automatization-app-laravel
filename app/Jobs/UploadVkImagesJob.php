@@ -10,16 +10,17 @@ use App\Helpers\PublicationTaskDependencyResolver;
 use App\Jobs\Concerns\DefersVkFloodControlledTask;
 use App\Jobs\Concerns\MarksPublicationTaskFailedOnJobFailure;
 use App\Models\Agent;
-use App\Models\OfferImage;
 use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Scenarios\TaskDispatcher;
+use App\Services\PublicationImages;
 use App\Services\Vk\VkApiService;
 use App\Services\Vk\WallPost\VkPostContextFactory;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use VK\Exceptions\VKApiException;
@@ -46,6 +47,11 @@ class UploadVkImagesJob implements ShouldQueue
         private readonly int $floodAttempt = 0,
     ) {}
 
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('publication-task:'.$this->taskId))->shared()->dontRelease()->expireAfter(300)];
+    }
+
     public function handle(
         VkApiService $vkApi,
         PublicationTaskDependencyResolver $taskDependencyResolver,
@@ -67,9 +73,9 @@ class UploadVkImagesJob implements ShouldQueue
             }
 
             /** @var Agent $agent */
-            $agent = $offer->agent;
+            $agent = $task->publication->publishingAgent();
             /** @var VkUser|null $vkUser */
-            $vkUser = $agent->vkUser;
+            $vkUser = $agent?->vkUser;
 
             if (! $agent || ! $vkUser) {
                 throw new NotFoundException('Не найдены данные агента');
@@ -81,13 +87,10 @@ class UploadVkImagesJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkPostContextFactory)->getContext($offer->id);
+            $context = (new VkPostContextFactory)->getContext($offer->id, $agent->id);
             $imageCaption = $context->getImageCaption();
 
-            $pendingImages = OfferImage::where('offer_id', $offer->id)
-                ->whereNull('media_id')
-                ->orderBy('sort_order')
-                ->get();
+            $pendingImages = app(PublicationImages::class)->images($task->publication)->whereNull('media_id');
 
             if ($pendingImages->isEmpty()) {
                 $task->update(['status' => PublicationTaskStatus::SUCCESS]);
@@ -154,9 +157,7 @@ class UploadVkImagesJob implements ShouldQueue
                 }
             }
 
-            $failedImages = OfferImage::where('offer_id', $offer->id)
-                ->whereNull('media_id')
-                ->count();
+            $failedImages = $pendingImages->whereNull('media_id')->count();
 
             if ($failedImages > 0) {
                 $task->update([

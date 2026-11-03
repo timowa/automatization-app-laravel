@@ -11,6 +11,7 @@ use App\Enums\OfferStatus;
 use App\Enums\PublicationTaskStatus;
 use App\Models\Agent;
 use App\Models\Offer;
+use App\Services\Exclusive\ExclusiveStatusPresenter;
 use App\Services\OfferHealthStatusResolver;
 use App\Services\PublicationTaskErrorPresenter;
 use Illuminate\Http\JsonResponse;
@@ -66,8 +67,12 @@ class OfferAdminController extends Controller
         $query = Offer::query()
             ->select('offers.*')
             ->leftJoin('agents', 'agents.id', '=', 'offers.agent_id')
-            ->leftJoin('publications', 'publications.offer_id', '=', 'offers.id')
-            ->with(['agent', 'publication.tasks']);
+            ->leftJoin('publications', fn ($join) => $join->on('publications.offer_id', '=', 'offers.id')->whereNull('publications.exclusive_run_id'))
+            ->with(['agent', 'publication.tasks', 'exclusiveRuns']);
+
+        if ($request->filled('exclusive')) {
+            $query->where('offers.exclusive', $request->input('exclusive') === '1');
+        }
 
         if ($request->filled('agent_id')) {
             $query->where('offers.agent_id', (int) $request->input('agent_id'));
@@ -102,13 +107,15 @@ class OfferAdminController extends Controller
             return [
                 'offer' => $offer,
                 'health' => $health,
-                'scenario' => $offer->publication?->scenario?->label() ?? '',
+                'scenario' => $offer->publication?->scenario?->label() ?? ($offer->exclusive_transition ? 'Без основного сценария' : ''),
+                'exclusive_status' => app(ExclusiveStatusPresenter::class)->label($offer),
             ];
         });
 
         $offers->setCollection($rows);
 
         $filters = [
+            'exclusive' => $request->input('exclusive'),
             'agent_id' => $request->input('agent_id'),
             'city' => $request->input('city'),
             'deal' => $request->input('deal'),

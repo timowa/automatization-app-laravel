@@ -8,6 +8,7 @@ use App\Enums\Category;
 use App\Enums\City;
 use App\Enums\Deal;
 use App\Enums\OfferStatus;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Offer extends Model
 {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+    use HasFactory;
 
     protected $table = 'offers';
 
@@ -26,6 +27,9 @@ class Offer extends Model
     const UPDATED_AT = null;
 
     protected $fillable = [
+        'exclusive',
+        'exclusive_transition',
+        'exclusive_skip_reason',
         'offer_id',
         'code',
         'stage',
@@ -50,6 +54,8 @@ class Offer extends Model
     ];
 
     protected $casts = [
+        'exclusive' => 'boolean',
+        'exclusive_transition' => 'boolean',
         'location' => 'array',
         'payload' => 'array',
         'area' => 'float',
@@ -110,7 +116,12 @@ class Offer extends Model
 
     public function publication(): HasOne
     {
-        return $this->hasOne(Publication::class, 'offer_id', 'id');
+        return $this->hasOne(Publication::class, 'offer_id', 'id')->whereNull('exclusive_run_id');
+    }
+
+    public function exclusiveRuns(): HasMany
+    {
+        return $this->hasMany(ExclusivePublicationRun::class);
     }
 
     public function getPrice(): int

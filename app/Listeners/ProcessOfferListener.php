@@ -7,9 +7,10 @@ use App\DTO\OfferChanged;
 use App\Events\OfferCreatedEvent;
 use App\Helpers\OfferChangesDetector;
 use App\Models\Offer;
+use App\Models\Publication;
 use App\Scenarios\ScenarioResolver;
+use App\Services\Exclusive\ExclusivePublicationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Support\Facades\Log;
 
 class ProcessOfferListener implements ShouldQueue
@@ -21,8 +22,7 @@ class ProcessOfferListener implements ShouldQueue
         public OfferChangesDetector $offerChangesDetector,
         public ScenarioResolver $scenarioResolver,
         public CreatePublicationAction $createPublicationAction,
-    )
-    {
+    ) {
         //
     }
 
@@ -33,6 +33,21 @@ class ProcessOfferListener implements ShouldQueue
     {
         $prevOffer = $event->prevOfferId ? Offer::findOrFail($event->prevOfferId) : null;
         $newOffer = Offer::findOrFail($event->newOfferId);
+        if ($newOffer->exclusive_transition) {
+            if ($newOffer->exclusive_skip_reason !== null) {
+                return;
+            }
+            $source = Publication::whereNull('exclusive_run_id')
+                ->whereHas('offer', fn ($q) => $q->where('code', $newOffer->code)->where('id', '<', $newOffer->id))
+                ->latest('id')->first();
+            $service = app(ExclusivePublicationService::class);
+            $run = $service->start($newOffer, $source, 'transition');
+            if ($run !== null) {
+                $service->expand($run);
+            }
+
+            return;
+        }
         $changes = $this->offerChangesDetector->detect($prevOffer, $newOffer);
         $offerChanged = new OfferChanged($prevOffer, $newOffer, $changes);
 
@@ -41,6 +56,7 @@ class ProcessOfferListener implements ShouldQueue
         if (is_null($scenario)) {
             Log::channel('job')->warning('Сценарий не был выбран');
             $newOffer->update(['skip_reason' => 'Сценарий не выбран']);
+
             return;
         }
 

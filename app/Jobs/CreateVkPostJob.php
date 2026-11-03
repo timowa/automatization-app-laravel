@@ -11,11 +11,11 @@ use App\Helpers\ScenarioVkPostTemplateResolver;
 use App\Jobs\Concerns\DefersVkFloodControlledTask;
 use App\Jobs\Concerns\MarksPublicationTaskFailedOnJobFailure;
 use App\Models\Agent;
-use App\Models\OfferImage;
 use App\Models\PublicationTask;
 use App\Models\VkUser;
 use App\Models\VkWallPost;
 use App\Scenarios\TaskDispatcher;
+use App\Services\PublicationImages;
 use App\Services\Vk\VkApiService;
 use App\Services\Vk\WallPost\VkPostContextFactory;
 use App\Services\Vk\WallPost\VkPostGenerator;
@@ -23,6 +23,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use VK\Exceptions\VKApiException;
@@ -41,7 +42,13 @@ class CreateVkPostJob implements ShouldQueue
     public function __construct(
         private readonly int $taskId,
         private readonly int $floodAttempt = 0,
+        private readonly ?int $agentId = null,
     ) {}
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('publication-task:'.$this->taskId))->shared()->dontRelease()->expireAfter(300)];
+    }
 
     public function handle(VkApiService $vkApi,
         ScenarioVkPostTemplateResolver $templateResolver,
@@ -64,9 +71,12 @@ class CreateVkPostJob implements ShouldQueue
             }
 
             /** @var Agent $agent */
-            $agent = $offer->agent;
+            $agent = $task->publication->publishingAgent();
+            if (($this->agentId ?? null) !== null && $this->agentId !== $agent?->id) {
+                throw new NotFoundException('Агент задачи не совпадает с агентом публикации');
+            }
             /** @var VkUser|null $vkUser */
-            $vkUser = $agent->vkUser;
+            $vkUser = $agent?->vkUser;
 
             if (! $agent || ! $vkUser) {
                 throw new NotFoundException('Не найдены данные агента');
@@ -78,29 +88,29 @@ class CreateVkPostJob implements ShouldQueue
 
             $vkApi->setToken($vkUser->getToken());
 
-            $context = (new VkPostContextFactory)->getContext($offer->id);
-            $template = $templateResolver->resolve($task->publication->scenario);
+            $context = (new VkPostContextFactory)->getContext($offer->id, $agent->id);
+            $template = $templateResolver->resolve($task->publication->exclusiveRun?->scenario ?? $task->publication->scenario);
             $message = (new VkPostGenerator)->generate($context, $template);
 
-            $attachments = $offer->images
-                ->whereNotNull('media_id')
-                ->map(fn (OfferImage $img) => 'photo'.(int) $vkUser->vk_user_id.'_'.$img->media_id)
-                ->values()
-                ->take(10)
-                ->toArray();
+            $attachments = app(PublicationImages::class)->attachments($task->publication);
 
-            $res = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $attachments);
-
-            $post = VkWallPost::create([
-                'offer_id' => $offer->id,
-                'post_id' => $res['post_id'],
-                'owner_id' => (int) $vkUser->vk_user_id,
-                'task_id' => (int) $this->taskId,
-            ]);
+            $post = VkWallPost::where('task_id', $this->taskId)->first();
+            if ($post === null) {
+                $res = $vkApi->wallPost((int) $vkUser->vk_user_id, $message, $attachments, 'publication-task-'.$this->taskId);
+                $post = VkWallPost::create([
+                    'offer_id' => $offer->id,
+                    'post_id' => $res['post_id'],
+                    'owner_id' => (int) $vkUser->vk_user_id,
+                    'task_id' => (int) $this->taskId,
+                ]);
+            }
 
             $task->update(['status' => PublicationTaskStatus::SUCCESS, 'external_id' => $post->id]);
 
             Log::channel('job')->info('Пост по офферу опубликован', [
+                'publication_id' => $task->publication_id,
+                'agent_id' => $agent->id,
+                'exclusive_run_id' => $task->publication->exclusive_run_id,
                 'offer' => $offer->code,
                 'post_id' => $post->id,
             ]);

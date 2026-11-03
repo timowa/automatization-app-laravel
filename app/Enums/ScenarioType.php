@@ -8,6 +8,7 @@ enum ScenarioType: string
 {
     use EnumHasLabel;
 
+    case EXCLUSIVE = 'exclusive';
     case ANNOUNCEMENT = 'announcement';
     case RENT = 'rent';
     case SALE = 'sale';
@@ -24,6 +25,7 @@ enum ScenarioType: string
     public function label(): string
     {
         return match ($this) {
+            self::EXCLUSIVE => 'Эксклюзив',
             self::ANNOUNCEMENT => 'Анонс',
             self::RENT => 'Аренда',
             self::SALE => 'Продажа',

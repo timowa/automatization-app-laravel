@@ -97,6 +97,15 @@ class VkApiService
     {
         $guard = new VkApiResponseGuard(new SensitiveDataRedactor);
         $stack = HandlerStack::create();
+        $stack->push(function (callable $handler): callable {
+            return function ($request, array $options) use ($handler) {
+                if ($request->getUri()->getHost() === 'api.vk.com') {
+                    app(VkRequestThrottle::class)->wait();
+                }
+
+                return $handler($request, $options);
+            };
+        });
         $stack->unshift(Middleware::mapResponse(
             static fn (ResponseInterface $response): ResponseInterface => $guard->sanitize($response),
         ));
@@ -224,7 +233,7 @@ class VkApiService
      * @throws VKApiException
      * @throws VKApiWallDonutException
      */
-    public function wallPost(int $ownerId, string $message, array $attachments = []): array
+    public function wallPost(int $ownerId, string $message, array $attachments = [], ?string $guid = null): array
     {
         $result = $this->client->wall()->post($this->token, [
             'owner_id' => $ownerId,
@@ -232,6 +241,7 @@ class VkApiService
             'attachments' => $attachments,
             'close_comments' => 0,
             'primary_attachments_mode' => 'grid',
+            'guid' => $guid,
         ]);
 
         return $result;
@@ -319,6 +329,21 @@ class VkApiService
                 @unlink($filename);
             }
         }
+    }
+
+    public function findStoryForPost(int $ownerId, string $postId): ?array
+    {
+        $response = $this->client->stories()->get($this->token, ['owner_id' => $ownerId]);
+        $url = 'https://vk.com/wall'.$postId;
+        foreach ($response['items'] ?? [] as $item) {
+            foreach ($item['stories'] ?? [$item] as $story) {
+                if (($story['link']['url'] ?? null) === $url && empty($story['is_deleted'])) {
+                    return $story;
+                }
+            }
+        }
+
+        return null;
     }
 
     public function storiesPost(string $postId, string $imagePath): array

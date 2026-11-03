@@ -8,6 +8,8 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote')->hourly();
 
+Schedule::command('publications:recover-exclusive')->everyMinute()->withoutOverlapping();
+
 Schedule::command('vk:check-tokens')->daily();
 Schedule::command('vk:daily-report')->dailyAt('07:00');
 Schedule::command('vk:sync-users')->daily();

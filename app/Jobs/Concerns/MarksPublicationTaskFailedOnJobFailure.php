@@ -25,7 +25,7 @@ trait MarksPublicationTaskFailedOnJobFailure
             return;
         }
 
-        if ($task->status !== PublicationTaskStatus::PROCESSING) {
+        if (! in_array($task->status, [PublicationTaskStatus::PROCESSING, PublicationTaskStatus::QUEUED], true)) {
             return;
         }
 

@@ -18,11 +18,13 @@ class CreatePublicationAction
         private TaskDispatcher $taskDispatcher,
     ) {}
 
-    public function execute(Offer $offer, Scenario $scenario): void
+    public function execute(Offer $offer, Scenario $scenario, ?int $agentId = null, ?int $exclusiveRunId = null): void
     {
-        $publication = DB::transaction(function () use ($offer, $scenario) {
+        $publication = DB::transaction(function () use ($offer, $scenario, $agentId, $exclusiveRunId) {
             $publication = Publication::create([
                 'offer_id' => $offer->id,
+                'agent_id' => $agentId ?? $offer->agent_id,
+                'exclusive_run_id' => $exclusiveRunId,
                 'scenario' => $scenario->type(),
             ]);
 
@@ -50,6 +52,6 @@ class CreatePublicationAction
 
         });
 
-        $this->taskDispatcher->dispatch($publication->id);
+        DB::afterCommit(fn () => $this->taskDispatcher->dispatch($publication->id));
     }
 }

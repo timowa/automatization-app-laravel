@@ -54,7 +54,7 @@ class PublishLoopStoriesCommand extends Command
                     continue;
                 }
 
-                $post = VkWallPost::where('offer_id', $offer->id)->first();
+                $post = VkWallPost::where('offer_id', $offer->id)->whereHas('task.publication', fn ($q) => $q->whereNull('exclusive_run_id'))->first();
                 if (! $post) {
                     $loopStory->update(['is_active' => false]);
                     Log::channel('job')->warning('Повторная публикация истории остановлена: пост не найден', [

@@ -27,6 +27,7 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use VK\Exceptions\VKApiException;
@@ -46,6 +47,11 @@ class CreateVkStoriesJob implements ShouldQueue
     public function __construct(
         private readonly int $taskId
     ) {}
+
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('publication-task:'.$this->taskId))->shared()->dontRelease()->expireAfter(300)];
+    }
 
     public function handle(VkApiService $vkApi,
         PublicationTaskDependencyResolver $taskDependencyResolver,
@@ -73,7 +79,7 @@ class CreateVkStoriesJob implements ShouldQueue
                 throw new NotFoundException('Оффер не найден');
             }
 
-            $agent = $offer->agent;
+            $agent = $task->publication->publishingAgent();
             /** @var VkUser|null $vkUser */
             $vkUser = $agent?->vkUser;
 
@@ -87,12 +93,32 @@ class CreateVkStoriesJob implements ShouldQueue
                 throw new NotFoundException('Пост удалён или не найден во ВКонтакте');
             }
 
+            if ($task->publication->exclusive_run_id !== null) {
+                $existing = $vkApi->findStoryForPost((int) $vkUser->vk_user_id, $post->getFullId());
+                if ($existing !== null) {
+                    $task->update(['status' => PublicationTaskStatus::SUCCESS, 'external_id' => $existing['owner_id'].'_'.$existing['id']]);
+                    $taskDependencyResolver->release($this->taskId);
+                    $taskDispatcher->dispatch($task->publication_id);
+
+                    return;
+                }
+                if ($task->external_started_at?->lte(now()->subDay())) {
+                    throw new NotFoundException('Результат прежней отправки истории неизвестен, а срок её доступности истёк. Требуется проверить публикацию вручную.');
+                }
+            }
             $context = (new VkStoriesContextFactory)->getContext((int) $post->id);
             $template = $this->resolveTemplate($context);
             $image = (new VkStoriesGenerator)->generate($context, $template);
 
             try {
-                $res = (new VkStoryPoster)->post($vkApi, $post->getFullId(), $image);
+                if ($task->publication->exclusive_run_id !== null && $task->external_started_at === null) {
+                    $task->update(['external_started_at' => now()]);
+                }
+                $res = (new VkStoryPoster)->post(
+                    $vkApi, $post->getFullId(), $image,
+                    $task->publication->exclusive_run_id !== null
+                        ? fn () => $vkApi->findStoryForPost((int) $vkUser->vk_user_id, $post->getFullId()) : null,
+                );
 
                 if (! VkApiService::isStorySaveSuccessful($res)) {
                     throw new VkStoryNotSavedException(
@@ -104,9 +130,13 @@ class CreateVkStoriesJob implements ShouldQueue
                 $this->deleteStoryFile($image);
             }
 
-            $task->update(['status' => PublicationTaskStatus::SUCCESS]);
+            $savedStory = $res['items'][0] ?? null;
+            $task->update(['status' => PublicationTaskStatus::SUCCESS, 'external_id' => isset($savedStory['owner_id'], $savedStory['id']) ? $savedStory['owner_id'].'_'.$savedStory['id'] : null]);
 
             Log::channel('job')->info('История по офферу опубликована', [
+                'publication_id' => $task->publication_id,
+                'agent_id' => $agent->id,
+                'exclusive_run_id' => $task->publication->exclusive_run_id,
                 'offer_id' => $context->offerId,
                 'post_id' => $post->id,
             ]);

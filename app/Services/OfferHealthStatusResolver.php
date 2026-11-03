@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\PublicationTaskStatus;
 use App\Models\Offer;
 use App\Models\PublicationTask;
+use Illuminate\Support\Collection;
 
 final class OfferHealthStatusResolver
 {
@@ -18,8 +19,7 @@ final class OfferHealthStatusResolver
 
     public function __construct(
         private readonly PublicationTaskErrorPresenter $errorPresenter = new PublicationTaskErrorPresenter,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{status: string, tooltip: string, can_retry: bool}
@@ -34,7 +34,7 @@ final class OfferHealthStatusResolver
             $publication->load('tasks');
         }
 
-        /** @var \Illuminate\Support\Collection<int, PublicationTask> $tasks */
+        /** @var Collection<int, PublicationTask> $tasks */
         $tasks = $publication?->tasks ?? collect();
 
         $failedTasks = $tasks->filter(
@@ -62,6 +62,10 @@ final class OfferHealthStatusResolver
                 'tooltip' => (string) $offer->skip_reason,
                 'can_retry' => $canRetry,
             ];
+        }
+
+        if ($publication === null && $offer->exclusive_transition) {
+            return ['status' => self::STATUS_OK, 'tooltip' => 'Без основного сценария. Результат указан в эксклюзивных публикациях.', 'can_retry' => false];
         }
 
         if ($publication === null || $tasks->isEmpty()) {

@@ -4,14 +4,13 @@ declare(strict_types=1);
 
 namespace App\Actions;
 
+use App\Enums\ScenarioType;
 use App\Scenarios\ScenarioFactory;
 use Illuminate\Support\Facades\DB;
 
 class GetAgentPublicationStatsAction
 {
-    public function __construct(private readonly ScenarioFactory $scenarioFactory)
-    {
-    }
+    public function __construct(private readonly ScenarioFactory $scenarioFactory) {}
 
     /**
      * @return array{
@@ -44,7 +43,9 @@ class GetAgentPublicationStatsAction
                 $query->select('vk_posts.id')
                     ->from('vk_posts')
                     ->join('offers', 'offers.id', '=', 'vk_posts.offer_id')
-                    ->where('offers.agent_id', $agentId);
+                    ->join('publication_tasks as task', 'task.id', '=', 'vk_posts.task_id')
+                    ->join('publications as publication', 'publication.id', '=', 'task.publication_id')
+                    ->whereRaw('COALESCE(publication.agent_id, offers.agent_id) = ?', [$agentId]);
             })
             ->groupBy('vk_post_id');
 
@@ -102,6 +103,7 @@ class GetAgentPublicationStatsAction
     {
         return collect($this->scenarioFactory->list())
             ->map(fn ($class) => (new $class)->type()->value)
+            ->push(ScenarioType::EXCLUSIVE->value)
             ->values()
             ->all();
     }

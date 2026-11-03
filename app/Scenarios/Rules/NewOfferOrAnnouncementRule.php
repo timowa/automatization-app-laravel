@@ -15,7 +15,7 @@ class NewOfferOrAnnouncementRule extends ScenarioRule
             return true;
         }
 
-        $prevPublication = Publication::where('offer_id', $offerChanged->previous->id)
+        $prevPublication = Publication::whereNull('exclusive_run_id')->where('offer_id', $offerChanged->previous->id)
             ->orderByDesc('id')
             ->first();
 

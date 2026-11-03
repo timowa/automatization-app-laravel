@@ -291,3 +291,7 @@ ScenarioResolver → Scenario
 Задачи: `VK_END_LOOP_STORY`, `VK_ARCHIVE_PRODUCT`.
 
 > WithdrawnScenario, DelayedScenario, DeletedScenario идентичны по структуре задач, различаются только проверяемым статусом.
+
+## Эксклюзивные объекты
+
+Дополнительный механизм, поле `exclusive`, правила завершения и повтора описаны в [exclusive-publications.md](exclusive-publications.md). Основная публикация и публикации получателей учитываются отдельно.

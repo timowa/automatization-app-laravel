@@ -17,6 +17,7 @@ use Throwable;
 class GetStatsCommand extends Command
 {
     protected $signature = 'vk:get-stats';
+
     protected $description = 'Сбор статистики просмотров VK-постов';
 
     public function handle(VkApiService $vkApi): int
@@ -32,30 +33,28 @@ class GetStatsCommand extends Command
 
         if ($activeOfferIds->isEmpty()) {
             $logger->info('Нет активных офферов');
+
             return self::SUCCESS;
         }
 
-        $agentIds = DB::table('offers')
-            ->where('status', OfferStatus::ACTIVE->value)
-            ->distinct()
-            ->pluck('agent_id');
-
-        $posts = VkWallPost::with('offer')
+        $posts = VkWallPost::with(['offer', 'task.publication'])
             ->whereIn('offer_id', $activeOfferIds)
             ->get();
 
         if ($posts->isEmpty()) {
             $logger->info('Нет постов для сбора статистики');
+
             return self::SUCCESS;
         }
 
+        $agentIds = $posts->map(fn ($post) => $post->task?->publication?->agent_id ?? $post->offer->agent_id)->filter()->unique();
         $vkUsers = VkUser::whereIn('agent_id', $agentIds)->get()->keyBy('agent_id');
 
         $postsByOwnerId = $posts->groupBy('owner_id');
 
         $ownerIdToAgentId = [];
         foreach ($posts as $post) {
-            $ownerIdToAgentId[(int) $post->owner_id] = (int) $post->offer->agent_id;
+            $ownerIdToAgentId[(int) $post->owner_id] = (int) ($post->task?->publication?->agent_id ?? $post->offer->agent_id);
         }
 
         $data = [];
@@ -63,10 +62,11 @@ class GetStatsCommand extends Command
             $agentId = $ownerIdToAgentId[(int) $ownerId] ?? null;
             $vkUser = $agentId !== null ? $vkUsers->get($agentId) : null;
 
-            if ($vkUser === null || $vkUser->getToken() === '' || !$vkUser->is_token_available) {
+            if ($vkUser === null || $vkUser->getToken() === '' || ! $vkUser->is_token_available) {
                 $logger->warning('Пропуск агента: нет токена или токен недоступен', [
                     'vk_user_id' => $ownerId,
                 ]);
+
                 continue;
             }
 
@@ -84,7 +84,7 @@ class GetStatsCommand extends Command
                         if (isset($stat['is_deleted']) && $stat['is_deleted'] === true) {
                             continue;
                         }
-                        $postFullId = $stat['owner_id'] . '_' . $stat['id'];
+                        $postFullId = $stat['owner_id'].'_'.$stat['id'];
                         $indexStats[$postFullId] = $stat;
                     }
 
@@ -107,6 +107,7 @@ class GetStatsCommand extends Command
                         'posts_count' => count($batch),
                         'error' => $e->getMessage(),
                     ]);
+
                     continue;
                 }
             }
@@ -115,7 +116,7 @@ class GetStatsCommand extends Command
         }
 
         try {
-            if (!empty($data)) {
+            if (! empty($data)) {
                 VkPostStat::insert($data);
             }
         } catch (Throwable $e) {
@@ -123,11 +124,11 @@ class GetStatsCommand extends Command
             $logger->warning('Ошибка при вставке данных в бд', ['exception' => $e]);
         }
 
-
-        $logger->info('Процесс сбора статистики завершен. Вставлено ' . count($data) . ' записей');
-        $jobLogger->info('Статистика собрана. Вставлено записей: ' . count($data));
+        $logger->info('Процесс сбора статистики завершен. Вставлено '.count($data).' записей');
+        $jobLogger->info('Статистика собрана. Вставлено записей: '.count($data));
 
         $this->info('Статистика собрана');
+
         return self::SUCCESS;
     }
 }

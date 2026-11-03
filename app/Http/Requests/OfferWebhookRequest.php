@@ -17,6 +17,11 @@ class OfferWebhookRequest extends FormRequest
     {
         return [
             'offers' => ['required', 'array'],
+            'offers.*.exclusive' => ['sometimes', function (string $attribute, mixed $value, \Closure $fail): void {
+                if (! is_bool($value)) {
+                    $fail('Признак эксклюзивности должен быть true или false.');
+                }
+            }],
             'offers.*.id' => ['required', 'numeric'],
             'offers.*.code' => ['required', 'string'],
             'offers.*.url' => ['required', 'url'],

@@ -184,6 +184,14 @@
     <h2 class="text-xl font-bold mb-4">Офферы</h2>
 
     <form method="GET" action="/offers" class="bg-white rounded shadow p-4 mb-4 grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div>
+            <label class="block text-xs text-gray-500 mb-1">Эксклюзивность</label>
+            <select name="exclusive" class="w-full border rounded px-2 py-1.5 text-sm">
+                <option value="">Все</option>
+                <option value="1" @selected(($filters['exclusive'] ?? '') === '1')>Эксклюзивные</option>
+                <option value="0" @selected(($filters['exclusive'] ?? '') === '0')>Обычные</option>
+            </select>
+        </div>
         <input type="hidden" name="sort" value="{{ $sort }}">
         <input type="hidden" name="dir" value="{{ $dir }}">
         <div>
@@ -261,6 +269,7 @@
                     <th class="px-3 py-2 text-left" data-col="code">{!! $sortLink('code', 'Код') !!}</th>
                     <th class="px-3 py-2 text-left" data-col="agent">{!! $sortLink('agent', 'Агент') !!}</th>
                     <th class="px-3 py-2 text-left" data-col="scenario">{!! $sortLink('scenario', 'Сценарий') !!}</th>
+                    <th class="px-3 py-2 text-left" data-col="exclusive">Эксклюзивные публикации</th>
                     <th class="px-3 py-2 text-left" data-col="id">{!! $sortLink('id', 'ID') !!}</th>
                     <th class="px-3 py-2 text-left" data-col="offer_id">{!! $sortLink('offer_id', 'Внешний ID') !!}</th>
                     <th class="px-3 py-2 text-left" data-col="status">{!! $sortLink('status', 'Статус объекта') !!}</th>
@@ -324,6 +333,7 @@
                         </td>
                         <td class="px-3 py-2">
                             <a href="/offers?code={{ urlencode($offer->code) }}" class="text-blue-600 hover:underline font-medium">{{ $offer->code }}</a>
+                            @if($offer->exclusive)<span class="text-xs text-purple-700">Эксклюзивный</span>@endif
                             <div>
                                 <button type="button" class="offer-toggle-tasks mt-1 text-xs text-gray-500 hover:text-gray-800 underline" data-offer-id="{{ $offer->id }}">
                                     Посмотреть задачи
@@ -332,6 +342,7 @@
                         </td>
                         <td class="px-3 py-2">{{ $offer->agent?->name ?? '—' }}</td>
                         <td class="px-3 py-2">{{ $scenario !== '' ? $scenario : '—' }}</td>
+                        <td class="px-3 py-2">@if($offer->exclusive)<a class="text-blue-600 hover:underline" href="{{ route('offers.exclusive', $offer) }}">{{ $row['exclusive_status'] }}</a>@else — @endif</td>
                         <td class="px-3 py-2">{{ $offer->id }}</td>
                         <td class="px-3 py-2">{{ $offer->offer_id ?? '—' }}</td>
                         <td class="px-3 py-2">

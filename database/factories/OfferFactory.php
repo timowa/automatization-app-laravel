@@ -16,6 +16,7 @@ class OfferFactory extends Factory
     public function definition(): array
     {
         return [
+            'exclusive' => false,
             'offer_id' => fake()->unique()->numberBetween(1, 1_000_000),
             'code' => (string) fake()->unique()->numberBetween(100, 999).'-'.fake()->numberBetween(1, 999),
             'stage' => 3,

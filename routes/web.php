@@ -3,6 +3,7 @@
 use App\Http\Controllers\AgentController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ChangelogController;
+use App\Http\Controllers\ExclusivePublicationController;
 use App\Http\Controllers\MiscController;
 use App\Http\Controllers\OfferAdminController;
 use App\Http\Controllers\OfferController;
@@ -32,6 +33,8 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::get('/agents/change-token/{id}', [AgentController::class, 'changeToken']);
     Route::post('/agents/update-token/{id}', [AgentController::class, 'updateToken']);
     Route::post('/agents/token-permissions/{id}', [AgentController::class, 'getTokenPermissions']);
+    Route::get('/offers/{offer}/exclusive', [ExclusivePublicationController::class, 'show'])->whereNumber('offer')->name('offers.exclusive');
+    Route::post('/offers/{offer}/exclusive/retry', [ExclusivePublicationController::class, 'retry'])->whereNumber('offer')->name('offers.exclusive.retry');
     Route::get('/offers', [OfferAdminController::class, 'index'])->name('offers.index');
     Route::get('/offers/{offer}/tasks', [OfferAdminController::class, 'tasks'])->whereNumber('offer')->name('offers.tasks');
     Route::get('/offers/{offer}/status', [OfferAdminController::class, 'status'])->whereNumber('offer')->name('offers.status');
@@ -44,4 +47,3 @@ Route::middleware(AdminAuthMiddleware::class)->group(function () {
     Route::get('/changelog', [ChangelogController::class, 'index'])->name('changelog');
     Route::post('/changelog/seen', [ChangelogController::class, 'markSeen'])->name('changelog.seen');
 });
-

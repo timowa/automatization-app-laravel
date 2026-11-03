@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace App\Services\Vk\WallPost;
 
+use App\Enums\Category;
+use App\Enums\Deal;
+use App\Models\Agent;
 use App\Models\Offer;
 
 class VkPostContextFactory
 {
-    public function getContext(int $offerId): VkPostContext
+    public function getContext(int $offerId, ?int $agentId = null): VkPostContext
     {
         $offer = Offer::findOrFail($offerId);
-        $agent = $offer->agent;
+        $agent = $agentId !== null ? Agent::findOrFail($agentId) : $offer->agent;
         $city = $offer->city();
 
         $prevOffer = Offer::where('code', $offer->code)
@@ -35,8 +38,8 @@ class VkPostContextFactory
             agentPhone: $agent->phone,
             cityName: $city?->label() ?? '',
             offerId: (int) $offer->offer_id,
-            deal: $offer->deal() ?? \App\Enums\Deal::SALE,
-            category: $offer->category() ?? \App\Enums\Category::APARTMENT,
+            deal: $offer->deal() ?? Deal::SALE,
+            category: $offer->category() ?? Category::APARTMENT,
             code: $offer->code,
         );
     }

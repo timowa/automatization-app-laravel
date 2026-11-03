@@ -37,15 +37,17 @@ class AgentController extends Controller
         $stats = DB::table('vk_post_stats')
             ->join('vk_posts', 'vk_posts.id', '=', 'vk_post_stats.vk_post_id')
             ->join('offers', 'offers.id', '=', 'vk_posts.offer_id')
+            ->join('publication_tasks as task', 'task.id', '=', 'vk_posts.task_id')
+            ->join('publications as publication', 'publication.id', '=', 'task.publication_id')
             ->where('vk_post_stats.datetime', '>=', now()->subDays(7))
             ->select(
-                'offers.agent_id',
+                DB::raw('COALESCE(publication.agent_id, offers.agent_id) as agent_id'),
                 DB::raw('SUM(vk_post_stats.views) as views'),
                 DB::raw('SUM(vk_post_stats.reposts) as reposts'),
                 DB::raw('SUM(vk_post_stats.likes) as likes'),
                 DB::raw('SUM(vk_post_stats.comments) as comments'),
             )
-            ->groupBy('offers.agent_id')
+            ->groupByRaw('COALESCE(publication.agent_id, offers.agent_id)')
             ->get()
             ->keyBy('agent_id');
 

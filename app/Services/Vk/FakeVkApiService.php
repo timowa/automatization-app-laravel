@@ -103,7 +103,7 @@ class FakeVkApiService extends VkApiService
         throw new \RuntimeException($this->failMessage);
     }
 
-    public function wallPost(int $ownerId, string $message, array $attachments = []): array
+    public function wallPost(int $ownerId, string $message, array $attachments = [], ?string $guid = null): array
     {
         $this->calls[] = ['method' => 'wallPost', 'owner_id' => $ownerId, 'message' => $message, 'attachments' => $attachments];
         $this->maybeFail('wallPost');
@@ -117,6 +117,11 @@ class FakeVkApiService extends VkApiService
         $this->maybeFail('uploadWallPhoto');
 
         return fake()->unique()->numberBetween(1, 1_000_000);
+    }
+
+    public function findStoryForPost(int $ownerId, string $postId): ?array
+    {
+        return null;
     }
 
     public function storiesPost(string $postId, string $imagePath): array

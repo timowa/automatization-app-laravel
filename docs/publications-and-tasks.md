@@ -125,3 +125,7 @@ TaskDispatcher::dispatch() → Job::dispatch() для новых PENDING зад�
 - Дубли офферов отсеиваются на уровне `ReceiveOfferWebhookAction`.
 - Публикация создаётся один раз для каждого нового оффера (через event-listener flow).
 - Job'ы имеют `$tries = 1` — при ошибке не повторяются автоматически.
+
+## Эксклюзивные объекты
+
+Дополнительный механизм, поле `exclusive`, правила завершения и повтора описаны в [exclusive-publications.md](exclusive-publications.md). Основная публикация и публикации получателей учитываются отдельно.

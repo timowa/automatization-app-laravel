@@ -34,12 +34,13 @@ final readonly class OfferData
         public ?array $location,
         public ?string $skipReason = null,
         public ?array $payload = null,
-    ) {
-    }
+        public bool $exclusive = false,
+    ) {}
 
     public function getArray(): array
     {
         return [
+            'exclusive' => $this->exclusive,
             'offer_id' => $this->offerId,
             'code' => $this->code,
             'stage' => $this->stage,

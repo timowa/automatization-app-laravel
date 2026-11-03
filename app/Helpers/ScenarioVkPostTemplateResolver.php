@@ -17,6 +17,15 @@ use App\Services\Vk\WallPost\Templates\SoldTemplate;
 
 final class ScenarioVkPostTemplateResolver
 {
+    public function supports(ScenarioType $type): bool
+    {
+        return in_array($type, [
+            ScenarioType::ANNOUNCEMENT, ScenarioType::RENT, ScenarioType::SALE,
+            ScenarioType::AGENT_CHANGED, ScenarioType::PRICE_CHANGED, ScenarioType::BOOKING,
+            ScenarioType::SOLD, ScenarioType::RENT_OUT, ScenarioType::FEEDBACK,
+        ], true);
+    }
+
     public function resolve(ScenarioType $scenarioType): VkPostTemplateInterface
     {
         return match ($scenarioType) {

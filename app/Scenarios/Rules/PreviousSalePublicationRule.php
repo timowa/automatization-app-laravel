@@ -15,7 +15,7 @@ class PreviousSalePublicationRule extends ScenarioRule
             return false;
         }
 
-        return Publication::whereHas('offer', function ($query) use ($offerChanged): void {
+        return Publication::whereNull('exclusive_run_id')->whereHas('offer', function ($query) use ($offerChanged): void {
             $query->where('code', $offerChanged->current->code);
         })->where('scenario', ScenarioType::SALE)->exists();
     }

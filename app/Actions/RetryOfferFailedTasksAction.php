@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Actions;
 
 use App\Enums\PublicationTaskStatus;
-use App\Helpers\JobResolver;
 use App\Models\Offer;
 use App\Models\PublicationTask;
 use App\Services\OfferHealthStatusResolver;
@@ -14,10 +13,9 @@ use RuntimeException;
 final class RetryOfferFailedTasksAction
 {
     public function __construct(
-        private readonly JobResolver $jobResolver,
+        private readonly RetryPublicationTasksAction $retry,
         private readonly OfferHealthStatusResolver $healthStatusResolver,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{status: string, tooltip: string, can_retry: bool, retried: int}
@@ -39,22 +37,14 @@ final class RetryOfferFailedTasksAction
             throw new RuntimeException('Нет задач с ошибкой');
         }
 
-        foreach ($failedTasks as $task) {
-            $task->update([
-                'status' => PublicationTaskStatus::QUEUED,
-                'error' => null,
-            ]);
-
-            $jobClass = $this->jobResolver->resolve($task->type);
-            $jobClass::dispatch($task->id);
-        }
+        $retried = $this->retry->execute($publication);
 
         $offer->refresh()->load(['publication.tasks']);
         $health = $this->healthStatusResolver->resolve($offer);
 
         return [
             ...$health,
-            'retried' => $failedTasks->count(),
+            'retried' => $retried,
         ];
     }
 }

@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class VkWallPost extends Model
 {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+    use HasFactory;
 
     protected $table = 'vk_posts';
 
     public $timestamps = true;
 
     const CREATED_AT = 'posted_at';
+
     const UPDATED_AT = null;
 
     protected $fillable = [
@@ -28,6 +30,11 @@ class VkWallPost extends Model
     protected $casts = [
         'posted_at' => 'datetime',
     ];
+
+    public function task(): BelongsTo
+    {
+        return $this->belongsTo(PublicationTask::class);
+    }
 
     public function offer(): BelongsTo
     {

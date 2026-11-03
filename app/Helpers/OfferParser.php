@@ -139,6 +139,7 @@ final class OfferParser
             $data['location'] ?? null,
             $skipReason,
             $payload,
+            ($data['exclusive'] ?? false) === true,
         );
     }
 }

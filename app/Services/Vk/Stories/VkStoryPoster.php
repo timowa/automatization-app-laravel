@@ -21,12 +21,16 @@ final class VkStoryPoster
     /**
      * @return array<string, mixed>
      */
-    public function post(VkApiService $vkApi, string $postId, string $imagePath): array
+    public function post(VkApiService $vkApi, string $postId, string $imagePath, ?\Closure $findExisting = null): array
     {
         $last = null;
 
         for ($attempt = 1; $attempt <= VkApiErrorInspector::TIMEOUT_MAX_ATTEMPTS; $attempt++) {
             try {
+                if ($attempt > 1 && $findExisting !== null && ($existing = $findExisting()) !== null) {
+                    return ['count' => 1, 'items' => [$existing]];
+                }
+
                 return $vkApi->storiesPost($postId, $imagePath);
             } catch (Throwable $e) {
                 $last = $e;

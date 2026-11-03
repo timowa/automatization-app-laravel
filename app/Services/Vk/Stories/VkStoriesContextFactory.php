@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Vk\Stories;
 
+use App\Enums\Category;
+use App\Enums\Deal;
 use App\Models\VkWallPost;
 
 class VkStoriesContextFactory
@@ -12,7 +14,7 @@ class VkStoriesContextFactory
     {
         $post = VkWallPost::findOrFail($postId);
         $offer = $post->offer;
-        $agent = $offer->agent;
+        $agent = $post->task?->publication?->publishingAgent() ?? $offer->agent;
 
         return new VkStoriesContext(
             agentName: $agent->name,
@@ -22,8 +24,8 @@ class VkStoriesContextFactory
             address: $offer->getAddressFromLocation(),
             rooms: (int) $offer->rooms,
             image: $offer->images->first()?->original_url ?? '',
-            deal: $offer->deal() ?? \App\Enums\Deal::SALE,
-            category: $offer->category() ?? \App\Enums\Category::APARTMENT,
+            deal: $offer->deal() ?? Deal::SALE,
+            category: $offer->category() ?? Category::APARTMENT,
             postId: $post->getFullId(),
             offerId: (int) $post->offer_id,
         );
